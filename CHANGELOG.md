@@ -19,10 +19,37 @@
 - list/search render the reader's workspace scope outcome (empty versus not found with suggestions); search skips divergent-replica sessions and discloses them instead of failing.
 - Content-free audit log (`audit.log`) for backup, restore and migrate; opt out with `CURSOR_HISTORY_MCP_AUDIT=0`.
 - README: "Claude Code in VSCodium on Windows" setup and "Write operations are previews by default".
+- Catalog-backed listing: `cursor_history_list` uses the reader's sidecar catalog by default (`CURSOR_HISTORY_MCP_CATALOG=auto`; `strict` or `direct` also accepted).
+  - Each listing reports one of four catalog states:
+    - `ready`: a verified-unchanged snapshot, which is complete.
+    - `building`: a direct read, which is also complete.
+    - `STALE`: the previous snapshot, explicitly *not* guaranteed complete, while a refresh runs.
+    - `unavailable`.
+  - There is no build at startup; `CURSOR_HISTORY_MCP_CATALOG_WARM=1` opts into one background refresh.
+  - New tool `cursor_history_index_refresh`; `cursor_history_status` reports the sidecar and its scopes.
+- Opt-in indexed search (`CURSOR_HISTORY_SEARCH_INDEX=1`). Every hit is verified against the source, so results are identical to a full scan.
+  - New `order` parameter: `relevance` (the default, a complete match-count ranking) or `recent` (the newest matching sessions; fast; stops early).
+  - Coverage lines state exactly what was searched and why the index was or wasn't used.
 
 ### Changed
 
-- `docs/sdk-compatibility.md` updated for ten tools and root schemas without `oneOf`.
+- `docs/sdk-compatibility.md` updated for eleven tools and root schemas without `oneOf`.
+- Reader bumped to the unreleased `cursor-history` with the catalog, search index, workspace inventory and backup fixes. Publish the reader first, then pin its version here.
+
+### Fixed
+
+- Backup/restore through MCP no longer reads the real default Cursor directory when `CURSOR_DATA_PATH` is set (a reader fix). The test suite now sandboxes `APPDATA`, `LOCALAPPDATA`, `USERPROFILE` and `HOME` for every test and spawned server, so no test can reach real data.
+
+### Performance (real 7.26 GB Cursor history, 507 sessions, over stdio)
+
+| Scenario | 0.3.1 (reader 0.18) | Unreleased |
+| --- | --- | --- |
+| Startup + `tools/list` | 8 of 11 tools usable; show/export/migrate hidden from Claude | 220 ms, all 11 tools |
+| `cursor_history_list` (limit 20) | 15+ min | 2.8 s cold (complete) / p95 29 ms warm |
+| Workspace-scoped list | 20 min (measured 1,181 s) | 0.7 s cold / 24 ms warm |
+| Unknown or known-empty workspace | 20 min | 54 ms / 22 ms, with suggestions or an "empty" notice |
+| `show` / `export` by UUID | unavailable in Claude | 2.6 s / 3.7 s |
+| `search` (limit 10, indexed) | 30-83 s (when it didn't fail on ambiguity) | `recent` 3-6 s; `relevance` 4-29 s |
 
 ## 0.3.1
 
