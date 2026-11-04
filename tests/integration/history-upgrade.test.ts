@@ -8,7 +8,7 @@ import { handleMigrate } from "../../src/tools/migrate.js";
 
 vi.mock("cursor-history", async (importOriginal) => ({
   ...await importOriginal<typeof import("cursor-history")>(),
-  listSessions: vi.fn(), getSession: vi.fn(), searchSessions: vi.fn(),
+  listSessions: vi.fn(), listSessionSummaries: vi.fn(), getSession: vi.fn(), searchSessions: vi.fn(),
   exportSessionToJson: vi.fn(), exportSessionToMarkdown: vi.fn(), migrateSession: vi.fn(),
 }));
 
@@ -20,11 +20,14 @@ const session: history.Session = {
   messages: [{ role: "user", content: "authentication question", timestamp: "2025-01-01T00:00:00Z", timestampSource: "session-fallback" }],
 };
 
+const { messages: _m, ...summaryBase } = session;
+const summary = { ...summaryBase, title: null, preview: "authentication question" };
+
 beforeEach(() => vi.resetAllMocks());
 
 describe("cursor-history 0.18 adapter", () => {
   it("lists native IDs, scoped indices and partial-source state", async () => {
-    vi.mocked(history.listSessions).mockResolvedValue({ data: [session], pagination: { total: 1, limit: 20, offset: 0, hasMore: false } });
+    vi.mocked(history.listSessionSummaries).mockResolvedValue({ data: [summary] as never, pagination: { total: 1, limit: 20, offset: 0, hasMore: false } });
     const result = await handleListSessions({ workspace: "/work/project" });
     expect(result).toContain("#5");
     expect(result).toContain(id);
