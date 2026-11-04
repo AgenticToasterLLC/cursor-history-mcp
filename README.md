@@ -202,7 +202,7 @@ These select data roots, not a project. Use a tool's `workspace` argument to fil
 |---|---|
 | `cursor_history_list` | List sessions with IDs, index scope, source and data status. `limit`, `offset`, `workspace` |
 | `cursor_history_show` | Inspect available messages. Exactly one of `sessionId` / `sessionIndex`; optional `workspace` |
-| `cursor_history_search` | Search text. `query`, `limit`, `context` (neighboring source lines), `workspace` |
+| `cursor_history_search` | Search text. `query`, `limit`, `context` (neighboring source lines), `workspace`, `order` (`relevance` default, or `recent`) |
 | `cursor_history_export` | Return Markdown or JSON content, not a file written by the server. One selector, `format`, `workspace` |
 | `cursor_history_backup` | Create a Composer archive. `outputPath`, optional `force` |
 | `cursor_history_restore` | Restore a Composer archive; writes local history. `backupPath`, optional `force` |
@@ -225,6 +225,20 @@ The show tool abbreviates long thinking/tool payloads. Use an export when you ne
 - “Export this session as JSON, including the available source details.”
 - “Preview copying this Composer session to /work/new-app with dryRun. Do not modify anything yet.”
 
+<a id="search-index"></a>
+## Search index and result order (optional)
+
+| Variable | Meaning |
+| --- | --- |
+| `CURSOR_HISTORY_SEARCH_INDEX` | `1` enables an indexed `cursor_history_search`. Default off. It uses the catalog mode from `CURSOR_HISTORY_MCP_CATALOG` (`auto` by default; it has no effect with `direct`). |
+
+- **How it works:** candidate sessions come from a full-text index in the catalog sidecar, and every candidate is re-verified against the source, so results are identical to a full scan. The index is built in the background (the first searches are direct scans and say so) and `cursor_history_index_refresh` with `wait: true` builds it on demand. Queries shorter than 3 characters or containing non-ASCII text always use the direct scan.
+- **Disk:** the index is large (roughly 425 MB for a 7 GB history).
+- **Privacy:** the index is a contentless trigram index. Message bodies are not stored, but the trigram postings let anyone who can read the sidecar infer substrings of your message text. That is why it is opt-in. Delete the sidecar file (see `CURSOR_HISTORY_INDEX_PATH`) to remove it.
+- **Disclosure:** every search result ends with a `Coverage:` line saying whether the index was used, why not (when it was not), and whether the index is stale (results may then miss recent messages).
+- **`order`:** `relevance` (default) ranks every matching session by match count: complete, but slower on large histories. `recent` returns the newest matching sessions first and stops once `limit` sessions match: fast, but more matches may exist, which the `Order:` line states. `recent` needs a reader version that supports it.
+- `cursor_history_status` shows whether the search index is enabled and, per scope, the indexed message count and index size when the reader reports them.
+
 <a id="catalog"></a>
 ## Catalog (fast listing)
 
@@ -241,7 +255,7 @@ On a large history a direct list can take seconds. The server keeps a disposable
 - List output includes a `Catalog:` line. `ready` means the snapshot matches the sources as verified. `building` means the first result was read directly and is complete. **`STALE` means Cursor history changed since the snapshot; the previous rows are shown and may be missing recent sessions** until the background refresh finishes (call `cursor_history_index_refresh` with `wait: true`, or use `strict`).
 - Changes made in the last couple of seconds are not treated as settled, so a snapshot built right after a change may still report `stale`.
 - Positional indexes (`#N`) are snapshot-bound; prefer the session UUID.
-- Search, show and export always read directly for now. `cursor_history_status` reports the sidecar path, size and per-scope state.
+- Show and export always read directly. Search reads directly unless the search index is enabled (next section). `cursor_history_status` reports the sidecar path, size and per-scope state.
 - Build workers are unref'd background threads and never keep the server alive; they end with the process.
 
 <a id="safety"></a>

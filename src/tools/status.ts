@@ -11,7 +11,7 @@ import type { CatalogMode, CatalogStatus } from "cursor-history";
 import { z } from "zod";
 import packageJson from "../../package.json";
 import { formatErrorText, mapCursorHistoryError } from "../errors.js";
-import { catalogMode, formatCatalogStatus } from "./catalog.js";
+import { catalogMode, formatCatalogStatus, searchIndexEnabled } from "./catalog.js";
 import { throwIfAborted, type HandlerContext } from "./history-context.js";
 
 const StatusInputSchema = z.object({ verbose: z.boolean().optional() });
@@ -90,6 +90,7 @@ export interface StatusInput {
   driver: string | undefined;
   paths: StatusPaths;
   budget: string[];
+  searchIndex?: boolean;
   catalog?: { mode: CatalogMode; status?: CatalogStatus; error?: string };
   probe: { ok: true; total: number; composer: number; store: number; ms: number } | { ok: false; error: string };
   verbose: boolean;
@@ -106,6 +107,7 @@ export function formatStatus(s: StatusInput): string {
     `Global DB: ${globalDbInfo(s.paths.globalDb)} (stat only, not opened)`,
     ...s.budget,
     ...formatCatalogStatus(s.catalog?.status, s.catalog?.mode ?? "direct", s.catalog?.error),
+    `Search index: ${s.searchIndex ? "enabled" : "disabled"} (CURSOR_HISTORY_SEARCH_INDEX=1 enables it; it needs catalog mode auto or strict; ${s.searchIndex ? "search is index-assisted when the index is ready" : "search is a direct full scan"})`,
     "",
     "Note: a live MCP connection does not mean history is readable. History readability probe (workspace inventory):",
   ];
@@ -165,6 +167,7 @@ export async function handleStatus(
     catalog = { mode, error: formatErrorText(mapCursorHistoryError(error)).replace(/\s+/g, " ") };
   }
   return formatStatus({
+    searchIndex: searchIndexEnabled() && mode !== "direct",
     catalog,
     serverVersion: packageJson.version,
     readerVersion: readerVersion(),

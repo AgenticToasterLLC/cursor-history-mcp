@@ -1,6 +1,6 @@
 import type { LibraryConfig, Session, WorkspaceScopeResolution } from "cursor-history";
 import { z } from "zod";
-import { catalogMode } from "./catalog.js";
+import { catalogMode, searchIndexEnabled } from "./catalog.js";
 
 export const readScopeShape = {
   workspace: z.string().min(1).optional(),
@@ -84,10 +84,14 @@ export function throwIfAborted(signal?: AbortSignal): void {
 export function readConfig(
   value: { workspace?: string; includeCrossWorkspaceSources?: boolean },
   signal?: AbortSignal,
-  options: { useCatalog?: boolean } = {}
+  options: { useCatalog?: boolean; searchIndex?: boolean } = {}
 ): LibraryConfig {
+  const mode = catalogMode();
+  // Indexed search needs catalog auto|strict; with direct (or the env off) search stays a full scan.
+  const indexed = options.searchIndex === true && searchIndexEnabled() && mode !== "direct";
   return {
-    ...(options.useCatalog ? { catalog: catalogMode() } : {}),
+    ...(options.useCatalog || indexed ? { catalog: mode } : {}),
+    ...(indexed ? { searchIndex: true } : {}),
     ...(signal ? { signal } : {}),
     workspace: value.workspace,
     includeCrossWorkspaceSources: value.includeCrossWorkspaceSources ?? false,
