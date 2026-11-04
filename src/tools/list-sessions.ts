@@ -5,8 +5,8 @@
 import { listSessionSummaries } from "cursor-history";
 import type { SessionSummary, ResolvedSessionSummary } from "cursor-history";
 import { z } from "zod";
-import { mapCursorHistoryError, isMcpError } from "../errors.js";
-import { readScopeShape, readScopeProperties, readConfig, formatTimestamp } from "./history-context.js";
+import { toToolError } from "../errors.js";
+import { readScopeShape, readScopeProperties, readConfig, formatTimestamp, throwIfAborted, type HandlerContext } from "./history-context.js";
 
 /**
  * Input schema for the list tool
@@ -68,15 +68,17 @@ function summarySource(s: ResolvedSessionSummary): string {
  * Handler for the list tool
  */
 export async function handleListSessions(
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  ctx: HandlerContext = {}
 ): Promise<string> {
   try {
     const parsed = ListInputSchema.parse(args);
+    throwIfAborted(ctx.signal);
 
     const result = await listSessionSummaries({
       limit: parsed.limit,
       offset: parsed.offset,
-      ...readConfig(parsed),
+      ...readConfig(parsed, ctx.signal),
     });
 
     const sessions = result.data;
@@ -144,10 +146,6 @@ export async function handleListSessions(
 
     return lines.join("\n");
   } catch (error) {
-    const mcpError = mapCursorHistoryError(error);
-    if (isMcpError(mcpError)) {
-      throw new Error(mcpError.message);
-    }
-    throw error;
+    throw toToolError(error);
   }
 }
