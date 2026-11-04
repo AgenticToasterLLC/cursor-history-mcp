@@ -45,6 +45,17 @@ const ERROR_MESSAGES: Record<McpErrorCode, string> = {
     "Invalid or corrupted backup file. Please verify the backup file integrity.",
 };
 
+function isZodLikeError(
+  error: unknown
+): error is { issues: { path: (string | number)[]; message: string }[] } {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { name?: unknown }).name === "ZodError" &&
+    Array.isArray((error as { issues?: unknown }).issues)
+  );
+}
+
 /**
  * Maps a cursor-history error to an MCP error response
  */
@@ -104,6 +115,21 @@ export function mapCursorHistoryError(error: unknown): McpError {
     return {
       code: MCP_ERROR_CODES.INVALID_BACKUP,
       message: ERROR_MESSAGES[MCP_ERROR_CODES.INVALID_BACKUP],
+    };
+  }
+
+  // Argument validation failures: readable text instead of a raw JSON dump
+  if (isZodLikeError(error)) {
+    const text = error.issues
+      .map((issue) => {
+        const path = issue.path.join(".");
+        return path ? `${path}: ${issue.message}` : issue.message;
+      })
+      .join("; ");
+    return {
+      code: MCP_ERROR_CODES.DATABASE_NOT_FOUND, // Default error code
+      message: error.issues.length > 1 || error.issues[0]?.path.length ? `Invalid arguments: ${text}` : text,
+      data: { validation: true },
     };
   }
 

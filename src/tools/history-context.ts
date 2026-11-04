@@ -28,16 +28,26 @@ export function hasOneSelector(value: { sessionIndex?: number; sessionId?: strin
   return (value.sessionIndex !== undefined) !== (value.sessionId !== undefined);
 }
 
+/** Message for a violated exactly-one-of rule between two selector arguments. */
+export function selectorMessage(a: string, b: string, aGiven: boolean): string {
+  return `Provide exactly one of ${a} or ${b} (${aGiven ? "both were" : "neither was"} given)`;
+}
+
+/** Zod superRefine callback enforcing exactly one of sessionId / sessionIndex. */
+export function refineOneSelector(value: { sessionIndex?: number; sessionId?: string }, ctx: z.RefinementCtx): void {
+  if (!hasOneSelector(value)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: selectorMessage("sessionId", "sessionIndex", value.sessionId !== undefined),
+    });
+  }
+}
+
 export const sessionSelectorProperties = {
-  sessionIndex: { type: "integer", minimum: 1, description: "One-based index from a list with the same workspace scope. Prefer sessionId for reuse." },
-  sessionId: { type: "string", minLength: 1, description: "Exact native session UUID returned by list/search. Case-sensitive; do not normalize." },
+  sessionIndex: { type: "integer", minimum: 1, description: "One-based index from a list with the same workspace scope. Prefer sessionId for reuse. Specify this OR sessionId, not both." },
+  sessionId: { type: "string", minLength: 1, description: "Exact case-sensitive native UUID returned by list/search (preferred). Specify this OR sessionIndex, not both." },
   ...readScopeProperties,
 };
-
-export const sessionSelectorAlternatives = [
-  { required: ["sessionIndex"], not: { required: ["sessionId"] } },
-  { required: ["sessionId"], not: { required: ["sessionIndex"] } },
-];
 
 export function readSelector(value: { sessionIndex?: number; sessionId?: string }): string | number {
   if (value.sessionId !== undefined) return value.sessionId;
