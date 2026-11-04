@@ -53,6 +53,18 @@ const ERROR_MESSAGES: Record<McpErrorCode, string> = {
   [MCP_ERROR_CODES.SESSION_AMBIGUOUS]: "The session has multiple divergent copies.",
   [MCP_ERROR_CODES.SESSION_SCOPE_MISMATCH]: "The session is not part of the requested scope.",
   [MCP_ERROR_CODES.INTERNAL_ERROR]: "An unexpected error occurred.",
+  [MCP_ERROR_CODES.PROTECTED_PATH]:
+    "Refused: the output path is inside Cursor's data folders or is named like a Cursor database.",
+  [MCP_ERROR_CODES.CURSOR_RUNNING]:
+    "Refused: Cursor appears to be running (or its database is busy or has an unflushed -wal file).",
+  [MCP_ERROR_CODES.LIVE_TARGET_NOT_CONFIRMED]:
+    "Refused: this restore would overwrite the live Cursor data directory without confirmation.",
+  [MCP_ERROR_CODES.SAFETY_COPY_FAILED]:
+    "Refused: the verified safety copy could not be created, so nothing was changed.",
+  [MCP_ERROR_CODES.INSUFFICIENT_DISK_SPACE]: "Refused: not enough free disk space for the safety copy.",
+  [MCP_ERROR_CODES.SAFETY_COPY_REQUIRED]: "Refused: the safety copy cannot be skipped for the live Cursor data.",
+  [MCP_ERROR_CODES.RESTORE_ROLLBACK_INCOMPLETE]:
+    "Restore failed and the automatic rollback was incomplete. Some files may not be in their original state.",
 };
 
 /** Library integrity codes that get their own MCP code instead of INTEGRITY_FAILED. */
@@ -61,6 +73,14 @@ const INTEGRITY_CODE_MAP: Record<string, McpErrorCode> = {
   SESSION_AMBIGUOUS: MCP_ERROR_CODES.SESSION_AMBIGUOUS,
   SESSION_SCOPE_MISMATCH: MCP_ERROR_CODES.SESSION_SCOPE_MISMATCH,
   SOURCE_LIMIT_EXCEEDED: MCP_ERROR_CODES.SOURCE_LIMIT_EXCEEDED,
+  PROTECTED_PATH: MCP_ERROR_CODES.PROTECTED_PATH,
+  CURSOR_RUNNING: MCP_ERROR_CODES.CURSOR_RUNNING,
+  LIVE_TARGET_NOT_CONFIRMED: MCP_ERROR_CODES.LIVE_TARGET_NOT_CONFIRMED,
+  RESTORE_SAFETY_COPY_FAILED: MCP_ERROR_CODES.SAFETY_COPY_FAILED,
+  MIGRATION_SAFETY_COPY_FAILED: MCP_ERROR_CODES.SAFETY_COPY_FAILED,
+  INSUFFICIENT_DISK_SPACE: MCP_ERROR_CODES.INSUFFICIENT_DISK_SPACE,
+  SAFETY_COPY_REQUIRED: MCP_ERROR_CODES.SAFETY_COPY_REQUIRED,
+  RESTORE_ROLLBACK_INCOMPLETE: MCP_ERROR_CODES.RESTORE_ROLLBACK_INCOMPLETE,
 };
 
 const INTEGRITY_REMEDIES: Partial<Record<McpErrorCode, string>> = {
@@ -69,6 +89,27 @@ const INTEGRITY_REMEDIES: Partial<Record<McpErrorCode, string>> = {
   [MCP_ERROR_CODES.WORKSPACE_AMBIGUOUS]: "Pass a longer or exact `workspace` path.",
   [MCP_ERROR_CODES.SESSION_AMBIGUOUS]: "Resolve the divergent copies, or select a different session.",
   [MCP_ERROR_CODES.SESSION_SCOPE_MISMATCH]: "Use the same `workspace` that was used when listing the session.",
+  [MCP_ERROR_CODES.PROTECTED_PATH]:
+    "Choose an output path outside Cursor's folders (User, globalStorage, workspaceStorage, store) and do not name it like a database (.vscdb, .db, .sqlite, -wal, -shm).",
+  [MCP_ERROR_CODES.CURSOR_RUNNING]:
+    "Quit Cursor completely (check the system tray and background processes), then retry. Nothing was changed.",
+  [MCP_ERROR_CODES.LIVE_TARGET_NOT_CONFIRMED]:
+    "Quit Cursor, preview with dryRun=true, then repeat with dryRun=false, force=true and confirm=true.",
+  [MCP_ERROR_CODES.SAFETY_COPY_FAILED]:
+    "Nothing was changed. Check free disk space and permissions on the safety-copy location (CURSOR_HISTORY_RESTORE_SAFETY_DIR / CURSOR_HISTORY_SAFETY_DIR), then retry.",
+  [MCP_ERROR_CODES.INSUFFICIENT_DISK_SPACE]:
+    "Free disk space on the drive that holds the safety-copy folder, or point CURSOR_HISTORY_SAFETY_DIR at a drive with more room. Nothing was changed.",
+  [MCP_ERROR_CODES.SAFETY_COPY_REQUIRED]:
+    "Safety copies cannot be skipped for the default Cursor data location.",
+  [MCP_ERROR_CODES.RESTORE_ROLLBACK_INCOMPLETE]:
+    "Quit Cursor and copy the files listed in the safety copy's manifest.json back into the Cursor User directory by hand.",
+};
+
+const PROTECTED_REASONS: Record<string, string> = {
+  "inside-cursor-data": "it is inside Cursor's data directory",
+  "inside-cursor-global-storage": "it is inside Cursor's globalStorage directory",
+  "inside-cursor-store": "it is inside Cursor's store directory",
+  "database-file-name": "it is named like a database file",
 };
 
 /**
@@ -120,12 +161,28 @@ export function mapCursorHistoryError(error: unknown): McpError {
   if (isSessionIntegrityError(error)) {
     const mappedCode = INTEGRITY_CODE_MAP[error.code];
     if (mappedCode !== undefined) {
-      const remedy = (error.details as Record<string, unknown> | undefined)?.remedy;
+      const details = (error.details ?? {}) as Record<string, unknown>;
+      let message = error.message;
+      let remedy =
+        mappedCode === MCP_ERROR_CODES.LIVE_TARGET_NOT_CONFIRMED
+          ? INTEGRITY_REMEDIES[mappedCode]
+          : typeof details.remedy === "string" ? details.remedy : INTEGRITY_REMEDIES[mappedCode];
+      if (mappedCode === MCP_ERROR_CODES.PROTECTED_PATH) {
+        const why = typeof details.reason === "string" ? PROTECTED_REASONS[details.reason] : undefined;
+        message = `${ERROR_MESSAGES[mappedCode]}${why ? ` Reason: ${why}.` : ""} The output must be outside Cursor's folders and must not be a database file.`;
+      } else if (mappedCode === MCP_ERROR_CODES.LIVE_TARGET_NOT_CONFIRMED) {
+        // The reader's text mentions CLI flags; MCP callers use `confirm`.
+        message = "Refusing to overwrite the live Cursor data directory: force=true alone is not enough. Pass confirm=true as well.";
+      } else if (mappedCode === MCP_ERROR_CODES.RESTORE_ROLLBACK_INCOMPLETE) {
+        const dir = typeof details.safetyCopyDir === "string" ? details.safetyCopyDir : undefined;
+        if (dir) remedy = `${remedy ?? ""}
+Safety copy (verified originals + manifest.json): ${dir}`.trim();
+      }
       return {
         code: mappedCode,
-        message: error.message,
-        remedy: typeof remedy === "string" ? remedy : INTEGRITY_REMEDIES[mappedCode],
-        data: { ...(error.details ?? {}) },
+        message,
+        remedy,
+        data: { ...details },
       };
     }
     return {
