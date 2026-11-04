@@ -118,7 +118,8 @@ describe.each(["v1", "v2-default", "v2-auto"] as const)("%s client interoperabil
       const pinnedTransport = new StdioClientTransportV2({
         command: process.execPath,
         args: [process.env.MCP_TEST_ENTRY ?? resolve("dist/index.cjs")],
-        env: { CURSOR_DATA_PATH: join(root, "User", "workspaceStorage"), CURSOR_STORE_ROOT: join(root, "store"), CURSOR_HISTORY_INDEX_PATH: join(root, "catalog.sqlite") },
+        // Minimal env on purpose; still carry the sandboxed user dirs from tests/setup.
+        env: { APPDATA: process.env.APPDATA ?? "", LOCALAPPDATA: process.env.LOCALAPPDATA ?? "", USERPROFILE: process.env.USERPROFILE ?? "", HOME: process.env.HOME ?? "", CURSOR_DATA_PATH: join(root, "User", "workspaceStorage"), CURSOR_STORE_ROOT: join(root, "store"), CURSOR_HISTORY_INDEX_PATH: join(root, "catalog.sqlite") },
         stderr: "pipe",
       });
       try {
