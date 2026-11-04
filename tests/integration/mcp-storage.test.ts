@@ -85,7 +85,7 @@ describe.each(["v1", "v2-default", "v2-auto"] as const)("%s client interoperabil
     transport = new Transport({
       command: process.execPath,
       args: [process.env.MCP_TEST_ENTRY ?? resolve("dist/index.cjs")],
-      env: { ...Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)), CURSOR_DATA_PATH: join(root, "User", "workspaceStorage"), CURSOR_STORE_ROOT: join(root, "store") },
+      env: { ...Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)), CURSOR_DATA_PATH: join(root, "User", "workspaceStorage"), CURSOR_STORE_ROOT: join(root, "store"), CURSOR_HISTORY_INDEX_PATH: join(root, "catalog.sqlite") },
       stderr: "pipe",
     });
     const identity = { name: "history-upgrade-test", version: "1.0.0" };
@@ -118,7 +118,7 @@ describe.each(["v1", "v2-default", "v2-auto"] as const)("%s client interoperabil
       const pinnedTransport = new StdioClientTransportV2({
         command: process.execPath,
         args: [process.env.MCP_TEST_ENTRY ?? resolve("dist/index.cjs")],
-        env: { CURSOR_DATA_PATH: join(root, "User", "workspaceStorage"), CURSOR_STORE_ROOT: join(root, "store") },
+        env: { CURSOR_DATA_PATH: join(root, "User", "workspaceStorage"), CURSOR_STORE_ROOT: join(root, "store"), CURSOR_HISTORY_INDEX_PATH: join(root, "catalog.sqlite") },
         stderr: "pipe",
       });
       try {
@@ -129,10 +129,10 @@ describe.each(["v1", "v2-default", "v2-auto"] as const)("%s client interoperabil
       }
     });
 
-    it("starts with package version and registers all eight tools", async () => {
+    it("starts with package version and registers all eleven tools", async () => {
       const pkg = JSON.parse(readFileSync("package.json", "utf8"));
       expect(client.getServerVersion()?.version).toBe(pkg.version);
-      expect((await client.listTools()).tools).toHaveLength(10);
+      expect((await client.listTools()).tools).toHaveLength(11);
       if (client instanceof ClientV2) expect(client.getProtocolEra()).toBe("legacy");
     });
 

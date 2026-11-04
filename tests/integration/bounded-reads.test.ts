@@ -32,7 +32,7 @@ describe("bounded reads over stdio", () => {
     const transport = new StdioClientTransport({
       command: process.execPath,
       args: [process.env.MCP_TEST_ENTRY ?? resolve("dist/index.cjs")],
-      env: { ...Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined)), CURSOR_DATA_PATH: join(root, "User", "workspaceStorage"), CURSOR_STORE_ROOT: join(root, "store"), ...extraEnv },
+      env: { ...Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined)), CURSOR_DATA_PATH: join(root, "User", "workspaceStorage"), CURSOR_STORE_ROOT: join(root, "store"), CURSOR_HISTORY_INDEX_PATH: join(root, "catalog.sqlite"), ...extraEnv },
       stderr: "pipe",
     });
     const client = new Client({ name: "bounded-reads-test", version: "1.0.0" }, { capabilities: {} });
@@ -138,6 +138,6 @@ describe("bounded reads over stdio", () => {
     expectHonest(await call(client, "cursor_history_show", { sessionId: composerId }));
     expectHonest(await call(client, "cursor_history_export", { sessionId: composerId }));
     const tools = await client.listTools();
-    expect(tools.tools.length).toBe(10);
+    expect(tools.tools.length).toBe(11);
   });
 });

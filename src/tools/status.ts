@@ -6,10 +6,12 @@ import { createRequire } from "node:module";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { getActiveDriver, getDefaultDataPath, listWorkspaces } from "cursor-history";
+import { getActiveDriver, getCatalogStatus, getDefaultDataPath, listWorkspaces } from "cursor-history";
+import type { CatalogMode, CatalogStatus } from "cursor-history";
 import { z } from "zod";
 import packageJson from "../../package.json";
 import { formatErrorText, mapCursorHistoryError } from "../errors.js";
+import { catalogMode, formatCatalogStatus } from "./catalog.js";
 import { throwIfAborted, type HandlerContext } from "./history-context.js";
 
 const StatusInputSchema = z.object({ verbose: z.boolean().optional() });
@@ -88,6 +90,7 @@ export interface StatusInput {
   driver: string | undefined;
   paths: StatusPaths;
   budget: string[];
+  catalog?: { mode: CatalogMode; status?: CatalogStatus; error?: string };
   probe: { ok: true; total: number; composer: number; store: number; ms: number } | { ok: false; error: string };
   verbose: boolean;
 }
@@ -102,7 +105,7 @@ export function formatStatus(s: StatusInput): string {
     `Store root: ${s.paths.storeRoot} (${exists(s.paths.storeRoot)})`,
     `Global DB: ${globalDbInfo(s.paths.globalDb)} (stat only, not opened)`,
     ...s.budget,
-    "Catalog: not yet available in this version",
+    ...formatCatalogStatus(s.catalog?.status, s.catalog?.mode ?? "direct", s.catalog?.error),
     "",
     "Note: a live MCP connection does not mean history is readable. History readability probe (workspace inventory):",
   ];
@@ -154,7 +157,15 @@ export async function handleStatus(
     if (ctx.signal?.aborted) throw error;
     probe = { ok: false, error: formatErrorText(mapCursorHistoryError(error)).replace(/\n/g, " ") };
   }
+  const mode = catalogMode();
+  let catalog: StatusInput["catalog"];
+  try {
+    catalog = { mode, status: await getCatalogStatus({}) };
+  } catch (error) {
+    catalog = { mode, error: formatErrorText(mapCursorHistoryError(error)).replace(/\s+/g, " ") };
+  }
   return formatStatus({
+    catalog,
     serverVersion: packageJson.version,
     readerVersion: readerVersion(),
     driver: getActiveDriver(),

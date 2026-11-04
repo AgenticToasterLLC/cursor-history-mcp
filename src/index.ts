@@ -22,6 +22,8 @@ import { backupTool, handleBackup } from "./tools/backup.js";
 import { restoreTool, handleRestore } from "./tools/restore.js";
 import { migrateTool, handleMigrate } from "./tools/migrate.js";
 import { workspacesTool, handleWorkspaces } from "./tools/workspaces.js";
+import { indexRefreshTool, handleIndexRefresh } from "./tools/index-refresh.js";
+import * as reader from "cursor-history";
 import { statusTool, handleStatus } from "./tools/status.js";
 import { yearPackTool, handleYearPack } from "./tools/year-pack/index.js";
 import type { HandlerContext } from "./tools/history-context.js";
@@ -42,6 +44,7 @@ const TOOLS = [
   yearPackTool,
   workspacesTool,
   statusTool,
+  indexRefreshTool,
 ];
 
 /**
@@ -61,6 +64,7 @@ const TOOL_HANDLERS: Record<
   cursor_history_year_pack: handleYearPack,
   cursor_history_workspaces: handleWorkspaces,
   cursor_history_status: handleStatus,
+  cursor_history_index_refresh: handleIndexRefresh,
 };
 
 /**
@@ -75,7 +79,11 @@ const ABORTABLE_TOOLS = new Set([
   "cursor_history_export",
   "cursor_history_workspaces",
   "cursor_history_status",
+  "cursor_history_index_refresh",
 ]);
+
+/** Tools that manage their own waiting (wait/timeoutMs) and are exempt from the per-call budget. */
+const BUDGET_EXEMPT = new Set(["cursor_history_index_refresh"]);
 
 const DEFAULT_TIME_BUDGET_MS = 120_000;
 
@@ -134,7 +142,7 @@ function createServer(): Server {
     // takes effect between source pages / at handler checkpoints, not in the
     // middle of a single blocking read.
     const abortable = ABORTABLE_TOOLS.has(name);
-    const budgetMs = abortable ? timeBudgetMs(name) : 0;
+    const budgetMs = abortable && !BUDGET_EXEMPT.has(name) ? timeBudgetMs(name) : 0;
     const budgetSignal = budgetMs > 0 ? AbortSignal.timeout(budgetMs) : undefined;
     const clientSignal = extra?.signal;
     const signals = [clientSignal, budgetSignal].filter((x): x is AbortSignal => x !== undefined);
@@ -190,6 +198,22 @@ function createServer(): Server {
 }
 
 /**
+ * Stops running catalog build workers when the reader exposes a cancel function
+ * (the current reader does not export one; its workers are unref'd so they never
+ * keep the process alive, and the process exit ends them).
+ */
+async function cancelCatalogWorkers(): Promise<void> {
+  const cancel = (reader as unknown as { cancelCatalogRefreshes?: () => Promise<void> }).cancelCatalogRefreshes;
+  if (typeof cancel === "function") await cancel().catch(() => undefined);
+}
+
+async function shutdown(server: Server): Promise<never> {
+  await cancelCatalogWorkers();
+  await server.close();
+  process.exit(0);
+}
+
+/**
  * Main entry point
  */
 async function main(): Promise<void> {
@@ -197,16 +221,27 @@ async function main(): Promise<void> {
   const transport = new StdioServerTransport();
 
   await server.connect(transport);
+  server.onclose = (): void => {
+    void cancelCatalogWorkers();
+  };
+
+  // Opt-in: schedule one background global catalog build after the handshake.
+  // Never blocks, never writes to stdout; errors go to stderr only.
+  if (process.env["CURSOR_HISTORY_MCP_CATALOG_WARM"] === "1") {
+    setTimeout(() => {
+      reader.refreshCatalog({ catalog: "auto" }).catch((error: unknown) => {
+        console.error("[catalog-warm] refresh failed:", error instanceof Error ? error.message : String(error));
+      });
+    }, 0).unref();
+  }
 
   // Handle graceful shutdown
   process.on("SIGINT", async () => {
-    await server.close();
-    process.exit(0);
+    await shutdown(server);
   });
 
   process.on("SIGTERM", async () => {
-    await server.close();
-    process.exit(0);
+    await shutdown(server);
   });
 }
 

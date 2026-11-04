@@ -5,6 +5,7 @@
 import { listSessionSummaries } from "cursor-history";
 import type { SessionSummary, ResolvedSessionSummary } from "cursor-history";
 import { z } from "zod";
+import { formatCatalogLine } from "./catalog.js";
 import { toToolError } from "../errors.js";
 import { readScopeShape, readScopeProperties, readConfig, formatScopeNotice, formatTimestamp, throwIfAborted, type HandlerContext } from "./history-context.js";
 
@@ -78,7 +79,7 @@ export async function handleListSessions(
     const result = await listSessionSummaries({
       limit: parsed.limit,
       offset: parsed.offset,
-      ...readConfig(parsed, ctx.signal),
+      ...readConfig(parsed, ctx.signal, { useCatalog: true }),
     });
 
     const sessions = result.data;
@@ -86,14 +87,20 @@ export async function handleListSessions(
     const diagnostics = result.diagnostics ?? [];
 
     const scopeNotice = formatScopeNotice(result.scope);
+    const catalogLine = formatCatalogLine(result.catalog);
     if (sessions.length === 0 && diagnostics.length === 0) {
-      return scopeNotice ?? "No Cursor chat sessions found.";
+      const empty = scopeNotice ?? "No Cursor chat sessions found.";
+      return catalogLine ? `${empty}
+${catalogLine}` : empty;
     }
 
     const lines: string[] = [
       ...(scopeNotice ? [scopeNotice] : []),
       `Found ${pagination.total} session(s). Showing ${sessions.length}:`,
       `Pagination: total=${pagination.total} offset=${pagination.offset} limit=${pagination.limit} hasMore=${pagination.hasMore}`,
+      ...(catalogLine
+        ? [catalogLine, "Positional indexes (#N) are bound to this snapshot and may shift after a refresh; prefer the session ID (UUID) for follow-up calls."]
+        : []),
       "",
     ];
 

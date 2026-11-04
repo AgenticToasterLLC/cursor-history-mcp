@@ -69,7 +69,7 @@ describe("workspaces, status, scope and ambiguity over stdio", () => {
     transport = new StdioClientTransport({
       command: process.execPath,
       args: [process.env.MCP_TEST_ENTRY ?? resolve("dist/index.cjs")],
-      env: { ...Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)), CURSOR_DATA_PATH: join(root, "User", "workspaceStorage"), CURSOR_STORE_ROOT: join(root, "store") },
+      env: { ...Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)), CURSOR_DATA_PATH: join(root, "User", "workspaceStorage"), CURSOR_STORE_ROOT: join(root, "store"), CURSOR_HISTORY_INDEX_PATH: join(root, "catalog.sqlite") },
       stderr: "pipe",
     });
     client = new Client({ name: "workspaces-status-test", version: "1.0.0" }, { capabilities: {} });
@@ -101,7 +101,7 @@ describe("workspaces, status, scope and ambiguity over stdio", () => {
     expect(result.error, result.text).not.toBe(true);
     expect(result.text).toContain("OK:");
     expect(result.text).toContain("Workspaces by source: composer=");
-    expect(result.text).toContain("Catalog: not yet available");
+    expect(result.text).toContain("Catalog mode: auto");
     expect(result.text).toContain("Reader (cursor-history) version:");
   });
 

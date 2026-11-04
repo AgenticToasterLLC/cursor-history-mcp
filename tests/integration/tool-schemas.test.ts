@@ -72,7 +72,7 @@ describe("published tool schemas and selector validation", () => {
     transport = new StdioClientTransport({
       command: process.execPath,
       args: [process.env.MCP_TEST_ENTRY ?? resolve("dist/index.cjs")],
-      env: { ...Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)), CURSOR_DATA_PATH: join(root, "User", "workspaceStorage"), CURSOR_STORE_ROOT: join(root, "store") },
+      env: { ...Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)), CURSOR_DATA_PATH: join(root, "User", "workspaceStorage"), CURSOR_STORE_ROOT: join(root, "store"), CURSOR_HISTORY_INDEX_PATH: join(root, "catalog.sqlite") },
       stderr: "pipe",
     });
     client = new Client({ name: "tool-schemas-test", version: "1.0.0" }, { capabilities: {} });
@@ -87,13 +87,13 @@ describe("published tool schemas and selector validation", () => {
 
   it("publishes every tool with a plain object root schema", async () => {
     const { tools } = await client.listTools();
-    // Matches TOOLS in src/index.ts: list, show, search, export, backup, restore, migrate, year_pack.
+    // Matches TOOLS in src/index.ts: list, show, search, export, backup, restore, migrate, year_pack, workspaces, status, index_refresh.
     expect(tools.map(tool => tool.name).sort()).toEqual([
-      "cursor_history_backup", "cursor_history_export", "cursor_history_list", "cursor_history_migrate",
+      "cursor_history_backup", "cursor_history_export", "cursor_history_index_refresh", "cursor_history_list", "cursor_history_migrate",
       "cursor_history_restore", "cursor_history_search", "cursor_history_show", "cursor_history_status",
       "cursor_history_workspaces", "cursor_history_year_pack",
     ]);
-    expect(tools).toHaveLength(10);
+    expect(tools).toHaveLength(11);
     for (const tool of tools) {
       expect(tool.inputSchema.type, tool.name).toBe("object");
       expect(findForbidden(tool.inputSchema), tool.name).toEqual([]);
