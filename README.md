@@ -139,6 +139,8 @@ These select data roots, not a project. Use a tool's `workspace` argument to fil
 | `cursor_history_restore` | Restore a Composer archive; writes local history. `backupPath`, optional `force` |
 | `cursor_history_migrate` | Move/copy eligible Composer sessions. `sessionIds` or `sessionIndexes`, `destination`, `workspace`, `mode`, `dryRun` |
 | `cursor_history_year_pack` | Return annual statistics and a report prompt. `year`, `language` (`en` / `zh`), `workspace`, sample limits |
+| `cursor_history_workspaces` | List known workspace paths (paths only, no content); some may have no sessions. `query`, `limit`, `offset` |
+| `cursor_history_status` | Versions, data locations, time budget and a readability probe. `verbose` |
 
 Prefer the **exact session UUID** from list/search for follow-up calls. Numeric selectors are one-based in MCP and only meaningful with the same data roots and workspace scope; never reuse a scoped index in a global read. UUID spelling is case-sensitive.
 

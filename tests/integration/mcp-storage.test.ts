@@ -132,7 +132,7 @@ describe.each(["v1", "v2-default", "v2-auto"] as const)("%s client interoperabil
     it("starts with package version and registers all eight tools", async () => {
       const pkg = JSON.parse(readFileSync("package.json", "utf8"));
       expect(client.getServerVersion()?.version).toBe(pkg.version);
-      expect((await client.listTools()).tools).toHaveLength(8);
+      expect((await client.listTools()).tools).toHaveLength(10);
       if (client instanceof ClientV2) expect(client.getProtocolEra()).toBe("legacy");
     });
 

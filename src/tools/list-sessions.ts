@@ -6,7 +6,7 @@ import { listSessionSummaries } from "cursor-history";
 import type { SessionSummary, ResolvedSessionSummary } from "cursor-history";
 import { z } from "zod";
 import { toToolError } from "../errors.js";
-import { readScopeShape, readScopeProperties, readConfig, formatTimestamp, throwIfAborted, type HandlerContext } from "./history-context.js";
+import { readScopeShape, readScopeProperties, readConfig, formatScopeNotice, formatTimestamp, throwIfAborted, type HandlerContext } from "./history-context.js";
 
 /**
  * Input schema for the list tool
@@ -85,11 +85,13 @@ export async function handleListSessions(
     const { pagination } = result;
     const diagnostics = result.diagnostics ?? [];
 
+    const scopeNotice = formatScopeNotice(result.scope);
     if (sessions.length === 0 && diagnostics.length === 0) {
-      return "No Cursor chat sessions found.";
+      return scopeNotice ?? "No Cursor chat sessions found.";
     }
 
     const lines: string[] = [
+      ...(scopeNotice ? [scopeNotice] : []),
       `Found ${pagination.total} session(s). Showing ${sessions.length}:`,
       `Pagination: total=${pagination.total} offset=${pagination.offset} limit=${pagination.limit} hasMore=${pagination.hasMore}`,
       "",

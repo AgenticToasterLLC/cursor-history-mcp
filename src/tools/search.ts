@@ -5,9 +5,9 @@
 import { searchSessions } from "cursor-history";
 import { z } from "zod";
 import { toToolError } from "../errors.js";
-import { readScopeShape, readScopeProperties, readConfig, sourceSummary, pathBasename, throwIfAborted, type HandlerContext } from "./history-context.js";
+import { readScopeShape, readScopeProperties, readConfig, formatScopeNotice, sourceSummary, pathBasename, throwIfAborted, type HandlerContext } from "./history-context.js";
 import { safeSlice } from "./show-session.js";
-import type { SearchResult } from "cursor-history";
+import type { SearchResult, WorkspaceScopeResolution } from "cursor-history";
 
 export const DEFAULT_SEARCH_MAX_CHARS = 60_000;
 /** Per-result display caps: context lines per side and chars per line. */
@@ -97,6 +97,12 @@ export function renderResult(result: SearchResult): string {
   ].join("\n");
 }
 
+function skippedLine(ids: string[]): string[] {
+  return ids.length > 0
+    ? [`Skipped ${ids.length} ambiguous session(s): ${ids.join(", ")} (divergent copies; not searched)`]
+    : [];
+}
+
 /**
  * Bounds total output: results are added until the next one would exceed
  * maxChars (the first result is always included).
@@ -104,7 +110,7 @@ export function renderResult(result: SearchResult): string {
 export function formatSearchOutput(
   query: string,
   results: SearchResult[],
-  options: { limit: number; maxChars?: number; workspace?: string }
+  options: { limit: number; maxChars?: number; workspace?: string; skippedAmbiguous?: string[]; scope?: WorkspaceScopeResolution }
 ): string {
   const maxChars = options.maxChars ?? DEFAULT_SEARCH_MAX_CHARS;
   const blocks: string[] = [];
@@ -120,13 +126,17 @@ export function formatSearchOutput(
   const limitNote = results.length >= options.limit
     ? ` The limit of ${options.limit} was reached, so further matches may exist; raise limit (max 100) or narrow with workspace.`
     : "";
+  const skipped = options.skippedAmbiguous ?? [];
+  const scopeNotice = formatScopeNotice(options.scope);
   return [
+    ...(scopeNotice ? [scopeNotice] : []),
     `Found ${results.length} match(es) for "${query}":`,
     "",
     blocks.join("\n"),
     `results shown: ${blocks.length} of ${results.length} returned · truncated: ${truncated}`,
     ...(truncated ? [`Output was bounded at maxChars=${maxChars}; raise maxChars (max 1000000) or lower limit/context to see the remaining ${results.length - blocks.length} result(s).`] : []),
-    `Coverage: search scanned ${scope} with a full scan through the direct source reader (not an index), so the scan is complete for that scope.${limitNote}`,
+    ...skippedLine(skipped),
+    `Coverage: search scanned ${scope} with a full scan through the direct source reader (not an index), so the scan is complete for that scope${skipped.length > 0 ? ", except for the skipped ambiguous session(s)" : ""}.${limitNote}`,
   ].join("\n");
 }
 
@@ -142,18 +152,37 @@ export async function handleSearch(
     throwIfAborted(ctx.signal);
     const limit = parsed.limit ?? 10;
 
+    // Supplying onDiagnostic makes the reader skip ambiguous sessions (and
+    // report them) instead of rejecting the whole search.
+    const skippedAmbiguous: string[] = [];
     const results = await searchSessions(parsed.query, {
       ...readConfig(parsed, ctx.signal),
       limit,
       context: parsed.context,
+      onDiagnostic: (d: { code: string; sessionId?: string }) => {
+        if (d.code === "SESSION_AMBIGUOUS" && d.sessionId && !skippedAmbiguous.includes(d.sessionId)) {
+          skippedAmbiguous.push(d.sessionId);
+        }
+      },
     });
     throwIfAborted(ctx.signal);
 
     if (results.length === 0) {
-      return `No matches found for "${parsed.query}".\nCoverage: full scan of ${parsed.workspace ? `workspace ${parsed.workspace}` : "all workspaces"} through the direct source reader (not an index); no match exists in that scope.`;
+      const scopeNotice = formatScopeNotice(results.scope);
+      const where = parsed.workspace ? `workspace ${parsed.workspace}` : "all workspaces";
+      const unsearchable = results.scope?.state === "empty" || results.scope?.state === "not-found";
+      const coverage = unsearchable
+        ? `Coverage: ${where} has no searchable sessions.`
+        : `Coverage: full scan of ${where} through the direct source reader (not an index); no match exists in that scope${skippedAmbiguous.length > 0 ? ", except for the skipped ambiguous session(s)" : ""}.`;
+      return [
+        ...(scopeNotice ? [scopeNotice] : []),
+        `No matches found for "${parsed.query}".`,
+        ...skippedLine(skippedAmbiguous),
+        coverage,
+      ].join("\n");
     }
 
-    return formatSearchOutput(parsed.query, results, { limit, maxChars: parsed.maxChars, workspace: parsed.workspace });
+    return formatSearchOutput(parsed.query, results, { limit, maxChars: parsed.maxChars, workspace: parsed.workspace, skippedAmbiguous, scope: results.scope });
   } catch (error) {
     throw toToolError(error);
   }
