@@ -85,8 +85,22 @@ function clip(line: string): string {
     : line;
 }
 
+/** Read scope a search ran under; message indexes are only valid under the same scope. */
+export interface SearchReadScope {
+  workspace?: string;
+  includeCrossWorkspaceSources?: boolean;
+}
+
+/** Exact cursor_history_show arguments that open this hit under the same scope. */
+export function openWithLine(result: SearchResult, scope: SearchReadScope = {}): string {
+  const args = [`sessionId=${result.session.id}`, `messageOffset=${result.messageIndex}`];
+  if (scope.workspace) args.push(`workspace=${JSON.stringify(scope.workspace)}`);
+  if (scope.includeCrossWorkspaceSources) args.push("includeCrossWorkspaceSources=true");
+  return `  Open with: cursor_history_show ${args.join(" ")} (use the same scope; message indexes differ between scopes)`;
+}
+
 /** Renders one result with capped context. */
-export function renderResult(result: SearchResult): string {
+export function renderResult(result: SearchResult, scope: SearchReadScope = {}): string {
   const workspaceName = result.session.workspace ? pathBasename(result.session.workspace) : "No workspace";
   const before = result.contextBefore ?? [];
   const after = result.contextAfter ?? [];
@@ -102,6 +116,7 @@ export function renderResult(result: SearchResult): string {
     `  "${clip(result.match)}"`,
     ...shownAfter.map(line => `    ${clip(line)}`),
     ...(omitted > 0 ? [`    (${omitted} more context line(s) omitted; use show or export for more)`] : []),
+    openWithLine(result, scope),
     "",
   ].join("\n");
 }
@@ -182,13 +197,13 @@ export function coverageLines(meta: SearchMeta | undefined, found: number, ambig
 export function formatSearchOutput(
   query: string,
   results: SearchResult[],
-  options: { limit: number; maxChars?: number; workspace?: string; skippedAmbiguous?: string[]; scope?: WorkspaceScopeResolution; meta?: SearchMeta }
+  options: { limit: number; maxChars?: number; workspace?: string; includeCrossWorkspaceSources?: boolean; skippedAmbiguous?: string[]; scope?: WorkspaceScopeResolution; meta?: SearchMeta }
 ): string {
   const maxChars = options.maxChars ?? DEFAULT_SEARCH_MAX_CHARS;
   const blocks: string[] = [];
   let used = 0;
   for (const result of results) {
-    const block = renderResult(result);
+    const block = renderResult(result, { workspace: options.workspace, includeCrossWorkspaceSources: options.includeCrossWorkspaceSources });
     if (blocks.length > 0 && used + block.length + 1 > maxChars) break;
     blocks.push(block);
     used += block.length + 1;
@@ -270,7 +285,7 @@ export async function handleSearch(
       ].join("\n");
     }
 
-    return formatSearchOutput(parsed.query, results, { limit, maxChars: parsed.maxChars, workspace: parsed.workspace, skippedAmbiguous, scope: results.scope, meta });
+    return formatSearchOutput(parsed.query, results, { limit, maxChars: parsed.maxChars, workspace: parsed.workspace, includeCrossWorkspaceSources: parsed.includeCrossWorkspaceSources, skippedAmbiguous, scope: results.scope, meta });
   } catch (error) {
     throw toToolError(error);
   }
