@@ -21,6 +21,8 @@ import { exportTool, handleExport } from "./tools/export.js";
 import { backupTool, handleBackup } from "./tools/backup.js";
 import { restoreTool, handleRestore } from "./tools/restore.js";
 import { migrateTool, handleMigrate } from "./tools/migrate.js";
+import { workspacesTool, handleWorkspaces } from "./tools/workspaces.js";
+import { statusTool, handleStatus } from "./tools/status.js";
 import { yearPackTool, handleYearPack } from "./tools/year-pack/index.js";
 import type { HandlerContext } from "./tools/history-context.js";
 import { McpToolError, formatErrorText, mapCursorHistoryError } from "./errors.js";
@@ -38,6 +40,8 @@ const TOOLS = [
   restoreTool,
   migrateTool,
   yearPackTool,
+  workspacesTool,
+  statusTool,
 ];
 
 /**
@@ -55,6 +59,8 @@ const TOOL_HANDLERS: Record<
   cursor_history_restore: handleRestore,
   cursor_history_migrate: handleMigrate,
   cursor_history_year_pack: handleYearPack,
+  cursor_history_workspaces: handleWorkspaces,
+  cursor_history_status: handleStatus,
 };
 
 /**
@@ -67,6 +73,8 @@ const ABORTABLE_TOOLS = new Set([
   "cursor_history_show",
   "cursor_history_search",
   "cursor_history_export",
+  "cursor_history_workspaces",
+  "cursor_history_status",
 ]);
 
 const DEFAULT_TIME_BUDGET_MS = 120_000;

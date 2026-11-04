@@ -90,9 +90,10 @@ describe("published tool schemas and selector validation", () => {
     // Matches TOOLS in src/index.ts: list, show, search, export, backup, restore, migrate, year_pack.
     expect(tools.map(tool => tool.name).sort()).toEqual([
       "cursor_history_backup", "cursor_history_export", "cursor_history_list", "cursor_history_migrate",
-      "cursor_history_restore", "cursor_history_search", "cursor_history_show", "cursor_history_year_pack",
+      "cursor_history_restore", "cursor_history_search", "cursor_history_show", "cursor_history_status",
+      "cursor_history_workspaces", "cursor_history_year_pack",
     ]);
-    expect(tools).toHaveLength(8);
+    expect(tools).toHaveLength(10);
     for (const tool of tools) {
       expect(tool.inputSchema.type, tool.name).toBe("object");
       expect(findForbidden(tool.inputSchema), tool.name).toEqual([]);

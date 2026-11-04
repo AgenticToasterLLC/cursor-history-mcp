@@ -138,6 +138,6 @@ describe("bounded reads over stdio", () => {
     expectHonest(await call(client, "cursor_history_show", { sessionId: composerId }));
     expectHonest(await call(client, "cursor_history_export", { sessionId: composerId }));
     const tools = await client.listTools();
-    expect(tools.tools.length).toBe(8);
+    expect(tools.tools.length).toBe(10);
   });
 });

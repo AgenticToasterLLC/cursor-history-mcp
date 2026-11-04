@@ -1,4 +1,4 @@
-import type { LibraryConfig, Session } from "cursor-history";
+import type { LibraryConfig, Session, WorkspaceScopeResolution } from "cursor-history";
 import { z } from "zod";
 
 export const readScopeShape = {
@@ -98,4 +98,32 @@ export function formatTimestamp(value: string, source?: string): string {
   if (Number.isNaN(date.getTime()) || source === "epoch-unknown") return "Unknown time";
   const approximate = !source || source === "unknown" || source.startsWith("inferred-") || source === "session-fallback";
   return `${approximate ? "≈ " : ""}${date.toLocaleString()} [${source ?? "unknown"}]`;
+}
+
+/**
+ * Renders the workspace scope outcome as content-free text (paths only), or
+ * undefined when nothing needs saying (unscoped, or a plain exact match).
+ */
+export function formatScopeNotice(scope: WorkspaceScopeResolution | undefined): string | undefined {
+  if (!scope) return undefined;
+  switch (scope.state) {
+    case "empty":
+      return `Workspace ${scope.path} is known to Cursor history but has no chat sessions (matched ${scope.matchKind}).`;
+    case "not-found": {
+      const lines = [`No workspace in local Cursor history matches ${scope.requested}.`];
+      const suggestions = scope.suggestions.slice(0, 5);
+      if (suggestions.length > 0) {
+        lines.push("Did you mean:");
+        for (const s of suggestions) lines.push(`  - ${s.path} (${s.reason}, score ${s.score.toFixed(2)})`);
+      }
+      lines.push("Use cursor_history_workspaces to list known workspace paths.");
+      return lines.join("\n");
+    }
+    case "matched":
+      return scope.matchKind === "unique-suffix"
+        ? `Workspace ${scope.requested} resolved to ${scope.path} (matched ${scope.matchKind}).`
+        : undefined;
+    default:
+      return undefined;
+  }
 }
