@@ -182,10 +182,18 @@ ${JSON.stringify(result.content)}
   describe("platform-default (live) target", () => {
     let fakeLiveUser: string;
     beforeAll(() => {
-      // The vitest setup points APPDATA at a sandbox; the platform default resolves under it.
+      // The vitest setup points APPDATA/HOME at a sandbox; the reader's per-OS default resolves under it
+      // (win32: %APPDATA%/Cursor/User, macOS: ~/Library/Application Support/Cursor/User, else ~/.config/Cursor/User).
+      const home = process.env.HOME ?? "";
       const appData = process.env.APPDATA ?? "";
+      expect(resolve(home).startsWith(resolve(tmpdir()))).toBe(true);
       expect(resolve(appData).startsWith(resolve(tmpdir()))).toBe(true);
-      fakeLiveUser = join(appData, "Cursor", "User");
+      fakeLiveUser =
+        process.platform === "win32"
+          ? join(appData, "Cursor", "User")
+          : process.platform === "darwin"
+            ? join(home, "Library", "Application Support", "Cursor", "User")
+            : join(home, ".config", "Cursor", "User");
       expect(existsSync(fakeLiveUser)).toBe(false);
       buildUserTree(fakeLiveUser, project, destination);
     });
