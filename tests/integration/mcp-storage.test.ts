@@ -85,7 +85,7 @@ describe.each(["v1", "v2-default", "v2-auto"] as const)("%s client interoperabil
     transport = new Transport({
       command: process.execPath,
       args: [process.env.MCP_TEST_ENTRY ?? resolve("dist/index.cjs")],
-      env: { ...Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)), CURSOR_DATA_PATH: join(root, "User", "workspaceStorage"), CURSOR_STORE_ROOT: join(root, "store") },
+      env: { ...Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)), CURSOR_DATA_PATH: join(root, "User", "workspaceStorage"), CURSOR_STORE_ROOT: join(root, "store"), CURSOR_HISTORY_MCP_AUDIT: "0" },
       stderr: "pipe",
     });
     const identity = { name: "history-upgrade-test", version: "1.0.0" };
@@ -172,7 +172,7 @@ describe.each(["v1", "v2-default", "v2-auto"] as const)("%s client interoperabil
       const backupPath = join(root, "history.zip");
       const backed = await call("cursor_history_backup", { outputPath: backupPath });
       expect(backed.error, backed.text).not.toBe(true);
-      const restored = await call("cursor_history_restore", { backupPath, force: true });
+      const restored = await call("cursor_history_restore", { backupPath, force: true, dryRun: false });
       expect(restored.error, restored.text).not.toBe(true);
       expect(restored.text).toContain("Restore completed successfully");
     });

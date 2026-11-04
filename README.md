@@ -87,6 +87,75 @@ npm run build
 
 In the server entry, use `"command": "node"` and `"args": ["/absolute/path/to/cursor-history-mcp/dist/index.cjs"]`, replacing the path. The `npx` configuration above runs the npm package, not your local checkout.
 
+<a id="claude-code-vscodium-windows"></a>
+### Claude Code in VSCodium on Windows
+
+VSCodium launches the Claude Code process, but it is Claude Code's own MCP client that spawns this server and validates the tool schemas. Everything below is therefore Claude Code configuration, not VSCodium configuration.
+
+Register the server for your user account. On Windows, `npx` is a `.cmd` shim, so wrap it with `cmd /c`:
+
+```bash
+claude mcp add --transport stdio --scope user cursor-history -- cmd /c npx -y cursor-history-mcp@0.3.1
+```
+
+If you installed the package globally (`npm i -g cursor-history-mcp`), use `cmd /c cursor-history-mcp`. For a local build (see [Run from source](#run-from-source)), call Node directly:
+
+```bash
+claude mcp add --transport stdio --scope user cursor-history -- node C:/path/to/cursor-history-mcp/dist/index.cjs
+```
+
+Equivalent user-level JSON (`~/.claude.json`, under `mcpServers`):
+
+```json
+{
+  "mcpServers": {
+    "cursor-history": {
+      "command": "cmd",
+      "args": ["/c", "cursor-history-mcp"]
+    }
+  }
+}
+```
+
+For a local build use `"command": "node"` and `"args": ["C:/path/to/cursor-history-mcp/dist/index.cjs"]`.
+
+**Verify that all tools are listed.** Run `claude mcp list` (the server should show as connected), then `/mcp` inside Claude Code and open the server. You should see all ten tools: `cursor_history_list`, `_show`, `_search`, `_export`, `_backup`, `_restore`, `_migrate`, `_year_pack`, `_workspaces` and `_status`. Ask Claude to call `cursor_history_status` to confirm that history is actually readable, not just that the server is connected.
+
+**Environment variables**
+
+| Variable | Purpose |
+|---|---|
+| `CURSOR_HISTORY_MCP_TIME_BUDGET_MS` | Per-call time budget for read tools in milliseconds (default `120000`, `0` disables). `CURSOR_HISTORY_MCP_TIME_BUDGET_MS_<TOOL>` (for example `..._SEARCH`) overrides it for one tool. |
+| `CURSOR_HISTORY_MCP_AUDIT` | Set to `0` to disable the write-tool [audit log](#write-operations-are-previews-by-default). |
+| Catalog variables | See the Catalog section. |
+
+Pass variables with `claude mcp add --env NAME=value ...` or an `"env"` object in the JSON entry.
+
+**Troubleshooting**
+
+- *Some tools are missing:* update to the latest `cursor-history-mcp` and restart Claude Code. Older releases published schemas that Claude Code's validator rejected, so affected tools were silently dropped.
+- *The first list is slow:* the first call may be building the catalog of a large history. Narrow with `workspace`, or raise `CURSOR_HISTORY_MCP_TIME_BUDGET_MS`; later calls are faster.
+- *"Connection closed" or the server will not start on Windows:* launch it through `cmd /c` (or an absolute path to `node`); a bare `npx` cannot be spawned directly.
+
+<a id="write-operations-are-previews-by-default"></a>
+### Write operations are previews by default
+
+The tools that can change local history are safe by default:
+
+| Tool | Default | To apply |
+|---|---|---|
+| `cursor_history_migrate` | `dryRun: true`, nothing changes | `dryRun: false`; for `mode: "move"` (the default) also `confirm: true`, because a move deletes the originals |
+| `cursor_history_restore` | `dryRun: true`, validates the archive and reports what would be restored | `dryRun: false`; overwriting existing data additionally needs `force: true` |
+| `cursor_history_backup` | Writes a new archive (it does not modify history); `force` is needed to overwrite an existing file | n/a |
+
+A preview says so explicitly: `PREVIEW ONLY. Nothing was changed. To apply: dryRun=false (and confirm=true for move).` A move without `confirm: true` is refused with an `[INVALID_ARGUMENTS]` error that explains why. Store-only, merged-source and ambiguous sessions are still refused by the reader.
+
+**Audit log.** Each backup, restore and migrate call (previews included) appends one JSON line to `audit.log` in the sidecar directory: the directory of `CURSOR_HISTORY_INDEX_PATH` if set, otherwise `%LOCALAPPDATA%\cursor-history\` on Windows, otherwise the system temp directory. It records only the time, tool, `mode`/`dryRun`/`force`/`confirm` flags, the number of selected sessions, success or failure, the error code and the duration. It never records session ids, titles, message text, backup contents or paths (not even hashed, since paths are low-entropy and a hash would be guessable). A failure to write the log never fails the tool. Disable it with `CURSOR_HISTORY_MCP_AUDIT=0`.
+
+```json
+{"time":"2026-01-01T12:00:00.000Z","tool":"cursor_history_migrate","mode":"copy","dryRun":true,"sessions":1,"success":true,"errorCode":null,"durationMs":42}
+```
+
 <a id="companion-project"></a>
 ## Two projects, one history reader
 

@@ -72,7 +72,7 @@ describe("published tool schemas and selector validation", () => {
     transport = new StdioClientTransport({
       command: process.execPath,
       args: [process.env.MCP_TEST_ENTRY ?? resolve("dist/index.cjs")],
-      env: { ...Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)), CURSOR_DATA_PATH: join(root, "User", "workspaceStorage"), CURSOR_STORE_ROOT: join(root, "store") },
+      env: { ...Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)), CURSOR_DATA_PATH: join(root, "User", "workspaceStorage"), CURSOR_STORE_ROOT: join(root, "store"), CURSOR_HISTORY_MCP_AUDIT: "0" },
       stderr: "pipe",
     });
     client = new Client({ name: "tool-schemas-test", version: "1.0.0" }, { capabilities: {} });
@@ -135,8 +135,8 @@ describe("published tool schemas and selector validation", () => {
     const input = name === "cursor_history_migrate" ? { ...args, destination: join(root, "destination"), dryRun: true } : args;
     const result = await call(name, input);
     expect(result.error).toBe(true);
-    // show/export tag validation errors with [INVALID_ARGUMENTS]; migrate keeps its plain message.
-    expect(result.text).toBe(name === "cursor_history_migrate" ? message : `[INVALID_ARGUMENTS] ${message}`);
+    // All tools, including write tools, tag validation errors with [INVALID_ARGUMENTS].
+    expect(result.text).toBe(`[INVALID_ARGUMENTS] ${message}`);
     expect(snapshot()).toEqual(before);
   });
 });
