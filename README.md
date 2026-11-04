@@ -30,7 +30,7 @@ No embeddings, indexing service, or API key is required by this server. Your ass
 
 Requires Node.js **20.x or 22.x–26.x**, readable local Cursor history, and a client that supports local stdio MCP servers. The client must run the server on the machine where that history is available.
 
-**Version scope:** these docs describe `cursor-history-mcp@0.3.1`, powered by `cursor-history@0.18.0`. If you are testing a checkout before its npm publication, use [the source setup](#run-from-source) below.
+**Version scope:** these docs describe `cursor-history-mcp@0.3.1`, powered by `cursor-history@0.19.0`. If you are testing a checkout before its npm publication, use [the source setup](#run-from-source) below.
 
 **Client compatibility:** the server uses MCP SDK 1.30.0. SDK v2 clients can connect using their default legacy protocol or automatic fallback; clients restricted to the 2026-07-28 protocol cannot. See [SDK interoperability](docs/sdk-compatibility.md) for the tested scope.
 
@@ -102,7 +102,7 @@ Agents can use either interface: direct CLI/API invocation or MCP tool calls.
 <a id="compatibility"></a>
 ## Works across storage generations
 
-With the `0.18.0` reader in MCP `0.3.1`:
+With the `0.19.0` reader in MCP `0.3.1`:
 
 | Source | Local files | Read / search / export |
 |---|---|---|
