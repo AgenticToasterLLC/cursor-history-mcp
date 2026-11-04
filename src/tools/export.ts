@@ -5,7 +5,7 @@
 import { exportSessionToMarkdown, exportSessionToJson } from "cursor-history";
 import { z } from "zod";
 import { mapCursorHistoryError, isMcpError } from "../errors.js";
-import { sessionSelectorShape, hasOneSelector, sessionSelectorProperties, sessionSelectorAlternatives, readSelector, readConfig } from "./history-context.js";
+import { sessionSelectorShape, refineOneSelector, sessionSelectorProperties, readSelector, readConfig } from "./history-context.js";
 
 /**
  * Input schema for the export tool
@@ -13,7 +13,7 @@ import { sessionSelectorShape, hasOneSelector, sessionSelectorProperties, sessio
 const ExportInputSchema = z.object({
   ...sessionSelectorShape,
   format: z.enum(["markdown", "json"]).default("markdown").optional(),
-}).refine(hasOneSelector, "Provide exactly one of sessionIndex or sessionId");
+}).superRefine(refineOneSelector);
 
 /**
  * Tool definition for MCP
@@ -34,7 +34,6 @@ export const exportTool = {
         default: "markdown",
       },
     },
-    oneOf: sessionSelectorAlternatives,
     additionalProperties: false,
   },
 };

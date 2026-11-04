@@ -5,12 +5,12 @@
 import { getSession } from "cursor-history";
 import { z } from "zod";
 import { mapCursorHistoryError, isMcpError } from "../errors.js";
-import { sessionSelectorShape, hasOneSelector, sessionSelectorProperties, sessionSelectorAlternatives, readSelector, readConfig, sourceSummary, formatTimestamp } from "./history-context.js";
+import { sessionSelectorShape, refineOneSelector, sessionSelectorProperties, readSelector, readConfig, sourceSummary, formatTimestamp } from "./history-context.js";
 
 /**
  * Input schema for the show tool
  */
-const ShowInputSchema = z.object(sessionSelectorShape).refine(hasOneSelector, "Provide exactly one of sessionIndex or sessionId");
+const ShowInputSchema = z.object(sessionSelectorShape).superRefine(refineOneSelector);
 
 /**
  * Tool definition for MCP
@@ -22,7 +22,6 @@ export const showSessionTool = {
   inputSchema: {
     type: "object" as const,
     properties: sessionSelectorProperties,
-    oneOf: sessionSelectorAlternatives,
     additionalProperties: false,
   },
 };

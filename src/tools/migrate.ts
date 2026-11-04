@@ -7,6 +7,7 @@
 import { migrateSession } from "cursor-history";
 import { z } from "zod";
 import { mapCursorHistoryError, isMcpError } from "../errors.js";
+import { selectorMessage } from "./history-context.js";
 
 /**
  * Input schema for the migrate tool
@@ -18,8 +19,14 @@ const MigrateInputSchema = z.object({
   mode: z.enum(["move", "copy"]).default("move").optional(),
   workspace: z.string().min(1).optional(),
   dryRun: z.boolean().optional(),
-}).refine(value => (value.sessionIndexes !== undefined) !== (value.sessionIds !== undefined),
-  "Provide exactly one of sessionIndexes or sessionIds");
+}).superRefine((value, ctx) => {
+  if ((value.sessionIndexes !== undefined) === (value.sessionIds !== undefined)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: selectorMessage("sessionIds", "sessionIndexes", value.sessionIds !== undefined),
+    });
+  }
+});
 
 /**
  * Tool definition for MCP
@@ -35,7 +42,7 @@ export const migrateTool = {
         type: "array",
         items: { type: "string", minLength: 1 },
         minItems: 1,
-        description: "Exact native UUIDs from list/search. Use instead of sessionIndexes for stable selection.",
+        description: "Exact native UUIDs from list/search. Preferred for stable selection. Specify this OR sessionIndexes, not both.",
       },
       workspace: {
         type: "string",
@@ -53,7 +60,7 @@ export const migrateTool = {
           minimum: 1,
         },
         description:
-          "List of session indexes to migrate (1-based, as shown in list output)",
+          "List of session indexes to migrate (1-based, as shown in list output). Specify this OR sessionIds, not both.",
         minItems: 1,
       },
       destination: {
@@ -68,10 +75,6 @@ export const migrateTool = {
       },
     },
     required: ["destination"],
-    oneOf: [
-      { required: ["sessionIndexes"], not: { required: ["sessionIds"] } },
-      { required: ["sessionIds"], not: { required: ["sessionIndexes"] } },
-    ],
     additionalProperties: false,
   },
 };
