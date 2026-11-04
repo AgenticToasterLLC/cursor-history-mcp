@@ -10,6 +10,11 @@
 
 ### Added
 
+- Write safety surfaced from the reader: `cursor_history_restore` gains `confirm` (maps to `confirmLiveTarget`; required with `dryRun: false` and `force: true` for the live Cursor folder) and `allowPartial`. Its preview lists blocking conditions (for example Cursor running), the files to replace and where the safety copy will go; a real run reports the safety copy folder, file count and how to roll back. `cursor_history_migrate` previews list blockers and the safety copy estimate (with a warning that large databases can take minutes) and real runs report the safety copy folder and size. Safety copies are never deleted automatically.
+- New typed errors: `PROTECTED_PATH` (backup output inside Cursor's folders or named like a database), `CURSOR_RUNNING`, `LIVE_TARGET_NOT_CONFIRMED`, `SAFETY_COPY_FAILED` (restore and migrate), `INSUFFICIENT_DISK_SPACE`, `SAFETY_COPY_REQUIRED` and `RESTORE_ROLLBACK_INCOMPLETE` (names the safety copy folder).
+- Restore now targets `CURSOR_DATA_PATH` when set (the reader otherwise always used the platform default) and reports a failed reader result as `[RESTORE_FAILED]` instead of success.
+- Audit log records `allowPartial` and a `safetyCopy` boolean (never a path).
+
 - Claude-compatible tool schemas: `cursor_history_show`, `cursor_history_export` and `cursor_history_migrate` publish plain `type: "object"` root schemas (no root `oneOf`), which Claude Code previously dropped silently. Exactly-one-of selector rules are enforced in the handlers with actionable messages; Zod validation errors are readable text.
 - `cursor_history_list` renders from message-free summaries (`listSessionSummaries`), shows ambiguous sessions with an explicit note, surfaces library diagnostics and prints pagination metadata; reader bumped to `cursor-history@0.19.0`.
 - Bounded reads: `cursor_history_show` pages with `messageOffset`/`maxMessages`/`maxChars`; `cursor_history_search` bounds output with `maxChars` and reports coverage; `cursor_history_export` chunks with `chunkOffset`/`maxChars`. Small exports are unchanged.

@@ -20,9 +20,12 @@ export interface AuditFlags {
   dryRun?: boolean;
   force?: boolean;
   confirm?: boolean;
+  allowPartial?: boolean;
 }
 
 export interface AuditEntry extends AuditFlags {
+  /** True when a safety copy was made (boolean only, never the path). */
+  safetyCopy?: boolean;
   time: string;
   tool: string;
   sessions: number | null;
@@ -64,14 +67,14 @@ export function writeAudit(entry: AuditEntry, env: NodeJS.ProcessEnv = process.e
 export async function withAudit(
   tool: string,
   flags: AuditFlags,
-  fn: () => Promise<{ text: string; sessions?: number }>,
+  fn: () => Promise<{ text: string; sessions?: number; safetyCopy?: boolean }>,
   env: NodeJS.ProcessEnv = process.env
 ): Promise<string> {
   const started = Date.now();
   const base = { time: new Date(started).toISOString(), tool, ...flags };
   try {
-    const { text, sessions } = await fn();
-    writeAudit({ ...base, sessions: sessions ?? null, success: true, errorCode: null, durationMs: Date.now() - started }, env);
+    const { text, sessions, safetyCopy } = await fn();
+    writeAudit({ ...base, ...(safetyCopy === undefined ? {} : { safetyCopy }), sessions: sessions ?? null, success: true, errorCode: null, durationMs: Date.now() - started }, env);
     return text;
   } catch (error) {
     const mapped = error instanceof McpToolError ? error.mcp : mapCursorHistoryError(error);
@@ -86,7 +89,7 @@ export async function withAudit(
 /** Extracts only boolean/enum flags from raw tool arguments (never values like paths or ids). */
 export function flagsFrom(args: Record<string, unknown>): AuditFlags {
   const flags: AuditFlags = {};
-  for (const key of ["dryRun", "force", "confirm"] as const) {
+  for (const key of ["dryRun", "force", "confirm", "allowPartial"] as const) {
     if (typeof args[key] === "boolean") flags[key] = args[key] as boolean;
   }
   if (args.mode === "move" || args.mode === "copy") flags.mode = args.mode;

@@ -11,6 +11,14 @@ import { withAudit, flagsFrom } from "../audit.js";
 import { MCP_ERROR_CODES } from "../types.js";
 import { selectorMessage } from "./history-context.js";
 
+/** Human-readable byte size. */
+export function formatSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${parseFloat((bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1))} ${units[i]}`;
+}
+
 /**
  * Input schema for the migrate tool
  */
@@ -37,7 +45,7 @@ const MigrateInputSchema = z.object({
 export const migrateTool = {
   name: "cursor_history_migrate",
   description:
-    "Move or copy eligible Composer sessions between workspaces. PREVIEW BY DEFAULT: dryRun defaults to true and nothing is changed. To apply, pass dryRun=false; mode 'move' (the default) deletes the originals and additionally requires confirm=true, so preview first and back up. Store-only, merged-source and ambiguous sessions are refused.",
+    "Move or copy eligible Composer sessions between workspaces. PREVIEW BY DEFAULT: dryRun defaults to true and nothing is changed. To apply, pass dryRun=false; mode 'move' (the default) deletes the originals and additionally requires confirm=true, so preview first and back up. Store-only, merged-source and ambiguous sessions are refused. Cursor must be closed for a real run; a verified safety copy of the affected databases is written first (never deleted automatically), which can take minutes for a large global database.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -133,12 +141,42 @@ export async function handleMigrate(
         );
       }
 
+      const blockers = new Map<string, string>();
+      for (const r of results) for (const b of r.blockers ?? []) blockers.set(b.code, b.message);
+      const estimate = Math.max(0, ...results.map((r) => r.safetyCopyEstimateBytes ?? 0));
+      const copies = new Map<string, NonNullable<(typeof results)[number]["safetyCopy"]>>();
+      for (const r of results) if (r.safetyCopy) copies.set(r.safetyCopy.directory, r.safetyCopy);
+
       if (successCount > 0) {
         lines.push(
           `${dryRun ? "Preview: would have" : "Successfully"} ${modeLabel} ${successCount} session(s) to:`,
           `📁 ${parsed.destination}`,
           ""
         );
+      }
+
+      if (dryRun) {
+        if (blockers.size > 0) {
+          lines.push("⛔ Blocking conditions (a real migration would be refused):");
+          for (const [code, message] of blockers) lines.push(`  • [${code}] ${message}`);
+          lines.push("Quit Cursor completely before applying.", "");
+        }
+        if (estimate > 0) {
+          lines.push(
+            `🛟 A verified safety copy of the affected databases (about ${formatSize(estimate)}) will be written before any change.`,
+            "   Copying a large global database can take minutes, and needs that much free disk space.",
+            ""
+          );
+        }
+      } else if (copies.size > 0) {
+        for (const copy of copies.values()) {
+          lines.push(
+            `🛟 Safety copy: ${copy.directory}`,
+            `   Size: ${formatSize(copy.totalBytes)} in ${copy.files.length} file(s) (manifest: ${copy.manifestPath})`,
+            "   It is never deleted automatically. To roll back, quit Cursor and copy the files listed in the manifest back to their original locations.",
+            ""
+          );
+        }
       }
 
       if (failedCount > 0) {
@@ -152,7 +190,7 @@ export async function handleMigrate(
         lines.push("No sessions were migrated.");
       }
 
-      return { text: lines.join("\n"), sessions: sessions.length };
+      return { text: lines.join("\n"), sessions: sessions.length, safetyCopy: copies.size > 0 };
     });
   } catch (error) {
     throw toToolError(error);

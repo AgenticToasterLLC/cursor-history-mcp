@@ -145,12 +145,23 @@ The tools that can change local history are safe by default:
 | Tool | Default | To apply |
 |---|---|---|
 | `cursor_history_migrate` | `dryRun: true`, nothing changes | `dryRun: false`; for `mode: "move"` (the default) also `confirm: true`, because a move deletes the originals |
-| `cursor_history_restore` | `dryRun: true`, validates the archive and reports what would be restored | `dryRun: false`; overwriting existing data additionally needs `force: true` |
-| `cursor_history_backup` | Writes a new archive (it does not modify history); `force` is needed to overwrite an existing file | n/a |
+| `cursor_history_restore` | `dryRun: true`, validates the archive and reports what would be restored, any blocking conditions and where the safety copy will go | `dryRun: false`; overwriting existing data additionally needs `force: true`; writing to the live (platform-default) Cursor folder also needs `confirm: true` |
+| `cursor_history_backup` | Writes a new archive (it does not modify history); `force` is needed to overwrite an existing file. The output must be outside Cursor's folders and must not be named like a database, otherwise `[PROTECTED_PATH]` | n/a |
 
 A preview says so explicitly: `PREVIEW ONLY. Nothing was changed. To apply: dryRun=false (and confirm=true for move).` A move without `confirm: true` is refused with an `[INVALID_ARGUMENTS]` error that explains why. Store-only, merged-source and ambiguous sessions are still refused by the reader.
 
-**Audit log.** Each backup, restore and migrate call (previews included) appends one JSON line to `audit.log` in the sidecar directory: the directory of `CURSOR_HISTORY_INDEX_PATH` if set, otherwise `%LOCALAPPDATA%\cursor-history\` on Windows, otherwise the system temp directory. It records only the time, tool, `mode`/`dryRun`/`force`/`confirm` flags, the number of selected sessions, success or failure, the error code and the duration. It never records session ids, titles, message text, backup contents or paths (not even hashed, since paths are low-entropy and a hash would be guessable). A failure to write the log never fails the tool. Disable it with `CURSOR_HISTORY_MCP_AUDIT=0`.
+**Safety copies and the Cursor-must-be-closed rule.** Before restore or migrate writes anything, the reader makes a verified copy (size and SHA-256 checked, with a `manifest.json`) of every file it is about to replace:
+
+- restore: `%LOCALAPPDATA%\cursor-historyestore-safety\<timestamp>-<id>\` (override with `CURSOR_HISTORY_RESTORE_SAFETY_DIR`)
+- migrate: `%LOCALAPPDATA%\cursor-history\migrate-safety\<timestamp>-<id>\` (override with `CURSOR_HISTORY_SAFETY_DIR`)
+
+(on macOS and Linux the same folders live in the platform cache directory.) Safety copies are **never deleted automatically**; remove them yourself when you no longer need them. The real-run output names the folder and the number of files; to roll back by hand, quit Cursor and copy the files listed in its `manifest.json` back. A failed restore is rolled back automatically from the copy. Copying a large global database can take minutes and needs that much free disk space; a migrate preview shows the estimated size. The MCP tools do not let you choose the location or skip the copy.
+
+Cursor must be closed. If it is running, has a non-empty `-wal` file next to a database, or a database is busy, the reader refuses with `[CURSOR_RUNNING]` and nothing is written (previews list it under "Blocking conditions" instead). Restoring over the live Cursor data with `force: true` additionally requires `confirm: true`; without it the call fails with `[LIVE_TARGET_NOT_CONFIRMED]`. If `CURSOR_DATA_PATH` is set, restore targets that folder instead. `allowPartial: true` lets a restore proceed with only the intact files when some archive entries fail their checksum (default: the whole restore is refused).
+
+Other typed refusals: `[PROTECTED_PATH]`, `[SAFETY_COPY_FAILED]`, `[INSUFFICIENT_DISK_SPACE]`, `[SAFETY_COPY_REQUIRED]` and `[RESTORE_ROLLBACK_INCOMPLETE]` (which names the safety copy folder to restore from by hand).
+
+**Audit log.** Each backup, restore and migrate call (previews included) appends one JSON line to `audit.log` in the sidecar directory: the directory of `CURSOR_HISTORY_INDEX_PATH` if set, otherwise `%LOCALAPPDATA%\cursor-history\` on Windows, otherwise the system temp directory. It records only the time, tool, `mode`/`dryRun`/`force`/`confirm`/`allowPartial` flags, whether a safety copy was made (a boolean, never its path), the number of selected sessions, success or failure, the error code and the duration. It never records session ids, titles, message text, backup contents or paths (not even hashed, since paths are low-entropy and a hash would be guessable). A failure to write the log never fails the tool. Disable it with `CURSOR_HISTORY_MCP_AUDIT=0`.
 
 ```json
 {"time":"2026-01-01T12:00:00.000Z","tool":"cursor_history_migrate","mode":"copy","dryRun":true,"sessions":1,"success":true,"errorCode":null,"durationMs":42}

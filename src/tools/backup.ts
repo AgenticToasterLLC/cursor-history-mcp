@@ -28,7 +28,7 @@ export const backupTool = {
       outputPath: {
         type: "string",
         description:
-          "Path where the backup file should be saved. If not specified, saves to ~/cursor-history-backups/ with a timestamp.",
+          "Path where the backup file should be saved. If not specified, saves to ~/cursor-history-backups/ with a timestamp. Must be OUTSIDE Cursor's folders (User, globalStorage, workspaceStorage, store) and must not be named like a database (.vscdb, .db, .sqlite, -wal, -shm); otherwise the call is refused with [PROTECTED_PATH].",
       },
       force: {
         type: "boolean",
