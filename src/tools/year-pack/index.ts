@@ -4,7 +4,7 @@
  */
 
 import { listSessions, getSession } from "cursor-history";
-import { mapCursorHistoryError, isMcpError } from "../../errors.js";
+import { toToolError } from "../../errors.js";
 import {
   YearPackInputSchema,
   type YearPackInput,
@@ -349,10 +349,6 @@ export async function handleYearPack(
 
     return output.join("\n");
   } catch (error) {
-    const mcpError = mapCursorHistoryError(error);
-    if (isMcpError(mcpError)) {
-      throw new Error(mcpError.message);
-    }
-    throw error;
+    throw toToolError(error);
   }
 }

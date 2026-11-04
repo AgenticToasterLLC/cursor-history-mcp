@@ -12,6 +12,9 @@ vi.mock("cursor-history", async (importOriginal) => ({
   exportSessionToJson: vi.fn(), exportSessionToMarkdown: vi.fn(), migrateSession: vi.fn(),
 }));
 
+// Keep in-process write-tool calls from writing a real audit log.
+process.env.CURSOR_HISTORY_MCP_AUDIT = "0";
+
 const id = "ABCDEFAB-0000-0000-0000-000000000001";
 const session: history.Session = {
   id, workspace: "/work/project", timestamp: "2025-01-01T00:00:00Z", messageCount: 1,
@@ -87,7 +90,7 @@ describe("cursor-history 0.18 adapter", () => {
 
   it("migrates by exact UUID without positional conversion", async () => {
     vi.mocked(history.migrateSession).mockResolvedValue([]);
-    await handleMigrate({ sessionIds: [id], destination: "/work/new", mode: "copy" });
+    await handleMigrate({ sessionIds: [id], destination: "/work/new", mode: "copy", dryRun: false });
     expect(history.migrateSession).toHaveBeenCalledWith(expect.objectContaining({ sessions: [id], mode: "copy", dryRun: false }));
   });
 

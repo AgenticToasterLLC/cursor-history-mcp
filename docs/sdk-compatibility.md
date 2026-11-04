@@ -13,6 +13,8 @@ SDK package versions and MCP wire-protocol revisions are different things. A cli
 
 The integration suite exercises tool discovery, history listing/search, reading/exporting all four synthetic storage formats, workspace scoping, rejected Store migration, and Composer backup/restore through real stdio connections for the first three configurations. It also verifies rejection when a v2 client pins the modern-only protocol. The v2 client is a development-only dependency; it is not bundled into the server.
 
+All eleven tools (`list`, `show`, `search`, `export`, `backup`, `restore`, `migrate`, `year_pack`, `workspaces`, `status`, `index_refresh`) are listed in these runs. Every tool publishes a plain `type: "object"` root input schema; none uses root-level `oneOf`, `anyOf`, `allOf` or `not`, which Claude Code's MCP client rejects (silently dropping the tool). Selector exclusivity (for example `sessionId` versus `sessionIndex`) is described in field descriptions and enforced by the handlers. `tests/integration/tool-schemas.test.ts` asserts this contract.
+
 This does not certify every application's custom client settings. Automatic stdio negotiation may spawn an extra probe process and incur a timeout before fallback; default legacy negotiation avoids that overhead.
 
 See the [official protocol-version guide](https://github.com/modelcontextprotocol/typescript-sdk/blob/main/docs/protocol-versions.md) for negotiation rules and the [v2 migration guide](https://github.com/modelcontextprotocol/typescript-sdk/blob/main/docs/migration/upgrade-to-v2.md) for the separate server upgrade needed to support modern-only clients.

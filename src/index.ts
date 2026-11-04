@@ -181,10 +181,6 @@ function createServer(): Server {
         };
       } else if (error instanceof McpToolError) {
         envelope = error.mcp;
-      } else if (error instanceof Error && !(error instanceof McpToolError) && !abortable) {
-        // Write tools still throw plain Errors with their final message.
-        console.error(`[${name}] ${error.message}`);
-        return errorResult(error.message);
       } else {
         envelope = mapCursorHistoryError(error);
       }

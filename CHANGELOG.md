@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+### Breaking changes for MCP callers
+
+- **`cursor_history_migrate` is a preview by default.** `dryRun` now defaults to `true`; a real migration needs `dryRun: false`. With `mode: "move"` (the default) it also needs `confirm: true`, otherwise the call is refused with `[INVALID_ARGUMENTS]` (a move deletes the originals). Previews print `PREVIEW ONLY. Nothing was changed.`
+- **`cursor_history_restore` is a dry run by default.** New `dryRun` option (default `true`) validates the archive and reports what would be restored without writing. A real restore needs `dryRun: false`; overwriting existing data still also needs `force: true`.
+- Errors from every tool, including backup, restore, migrate and year_pack, now arrive as `[CODE] message` plus a remedy (for example `[INVALID_ARGUMENTS] ...`) instead of bare text.
+
+### Added
+
+- Claude-compatible tool schemas: `cursor_history_show`, `cursor_history_export` and `cursor_history_migrate` publish plain `type: "object"` root schemas (no root `oneOf`), which Claude Code previously dropped silently. Exactly-one-of selector rules are enforced in the handlers with actionable messages; Zod validation errors are readable text.
+- `cursor_history_list` renders from message-free summaries (`listSessionSummaries`), shows ambiguous sessions with an explicit note, surfaces library diagnostics and prints pagination metadata; reader bumped to `cursor-history@0.19.0`.
+- Bounded reads: `cursor_history_show` pages with `messageOffset`/`maxMessages`/`maxChars`; `cursor_history_search` bounds output with `maxChars` and reports coverage; `cursor_history_export` chunks with `chunkOffset`/`maxChars`. Small exports are unchanged.
+- Per-call time budget for read tools (`CURSOR_HISTORY_MCP_TIME_BUDGET_MS`, default 120000, `0` disables; per-tool `..._<TOOL>` override) combined with client cancellation. Over-budget results are returned with a warning rather than discarded.
+- Typed errors with a `[CODE] message` line plus a remedy, including `INVALID_ARGUMENTS`, `TIME_BUDGET_EXCEEDED`, `CANCELLED`, `SOURCE_LIMIT_EXCEEDED`, `WORKSPACE_AMBIGUOUS`, `SESSION_AMBIGUOUS`, `SESSION_SCOPE_MISMATCH` and `INTERNAL_ERROR`.
+- New tools `cursor_history_workspaces` (paths-only inventory, paginated) and `cursor_history_status` (versions, data roots, time budget, readability probe).
+- list/search render the reader's workspace scope outcome (empty versus not found with suggestions); search skips divergent-replica sessions and discloses them instead of failing.
+- Content-free audit log (`audit.log`) for backup, restore and migrate; opt out with `CURSOR_HISTORY_MCP_AUDIT=0`.
+- README: "Claude Code in VSCodium on Windows" setup and "Write operations are previews by default".
+
+### Changed
+
+- `docs/sdk-compatibility.md` updated for ten tools and root schemas without `oneOf`.
+
 ## 0.3.1
 
 - Refresh development dependencies to patched releases: Vitest 4.1.11, tsup 8.5.1, Node 22 type definitions 22.20.1 and compatible transitive security updates. Existing application and test code is unchanged by this toolchain refresh. See [Development toolchain](docs/development.md) for setup and override maintenance.
