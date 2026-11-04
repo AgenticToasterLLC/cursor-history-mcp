@@ -12,6 +12,12 @@ export function catalogMode(env: NodeJS.ProcessEnv = process.env): CatalogMode {
   return raw === "direct" || raw === "strict" || raw === "auto" ? raw : "auto";
 }
 
+/** CURSOR_HISTORY_SEARCH_INDEX=1 (or true/on/yes): opt in to the reader's indexed search. Default off. */
+export function searchIndexEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const raw = env["CURSOR_HISTORY_SEARCH_INDEX"]?.trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "on" || raw === "yes";
+}
+
 /** One-line catalog disclosure for a list result, or undefined when no catalog info was returned (direct mode). */
 export function formatCatalogLine(info: CatalogInfo | undefined): string | undefined {
   if (!info) return undefined;
@@ -54,6 +60,10 @@ export function formatCatalogStatus(status: CatalogStatus | undefined, mode: Cat
       `verified=${s.verifiedAt ?? "n/a"}`,
       `buildMs=${s.buildMs ?? "n/a"}`,
     ];
+    // Optional reader fields (present only on readers that report the search index).
+    const idx = s as { searchMessageCount?: number; searchIndexBytes?: number };
+    if (idx.searchMessageCount !== undefined) parts.push(`indexedMessages=${idx.searchMessageCount}`);
+    if (idx.searchIndexBytes !== undefined) parts.push(`indexBytes=${idx.searchIndexBytes}`);
     if (s.lastError) parts.push(`lastError=${s.lastError.code} at ${s.lastError.at}`);
     lines.push(`  Scope ${s.workspace ?? "(global)"}: ${parts.join(" ")}`);
   }

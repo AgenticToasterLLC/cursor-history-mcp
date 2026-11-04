@@ -4,10 +4,11 @@
 
 import { searchSessions } from "cursor-history";
 import { z } from "zod";
-import { toToolError } from "../errors.js";
+import { McpToolError, toToolError } from "../errors.js";
+import { MCP_ERROR_CODES } from "../types.js";
 import { readScopeShape, readScopeProperties, readConfig, formatScopeNotice, sourceSummary, pathBasename, throwIfAborted, type HandlerContext } from "./history-context.js";
 import { safeSlice } from "./show-session.js";
-import type { SearchResult, WorkspaceScopeResolution } from "cursor-history";
+import type { CatalogInfo, LibraryConfig, SearchResult, WorkspaceScopeResolution } from "cursor-history";
 
 export const DEFAULT_SEARCH_MAX_CHARS = 60_000;
 /** Per-result display caps: context lines per side and chars per line. */
@@ -23,6 +24,7 @@ const SearchInputSchema = z.object({
   limit: z.number().int().min(1).max(100).default(10).optional(),
   context: z.number().int().min(0).max(500).default(50).optional(),
   maxChars: z.number().int().min(1).max(1_000_000).optional(),
+  order: z.enum(["relevance", "recent"]).optional(),
 });
 
 /**
@@ -64,6 +66,13 @@ export const searchTool = {
         maximum: 1000000,
         default: 60000,
       },
+      order: {
+        type: "string",
+        enum: ["relevance", "recent"],
+        default: "relevance",
+        description:
+          "relevance ranks every matching session by match count (complete but slower on large histories); recent returns the newest matching sessions first and stops early (fast; more matches may exist).",
+      },
     },
     required: ["query"],
     additionalProperties: false,
@@ -103,6 +112,69 @@ function skippedLine(ids: string[]): string[] {
     : [];
 }
 
+type ReaderOrder = "match-count" | "recent";
+
+/** How the reader answered the search; every field comes from non-enumerable result metadata. */
+export interface SearchMeta {
+  mode?: "indexed" | "direct";
+  reason?: string;
+  catalog?: CatalogInfo;
+  /** Order the reader reports it used (absent on readers without searchOrder). */
+  order?: ReaderOrder;
+  /** False means more matching sessions may exist beyond those returned. */
+  exhaustive?: boolean;
+  /** Order the caller asked for. */
+  requestedOrder?: ReaderOrder;
+}
+
+const REASON_TEXT: Record<string, string> = {
+  QUERY_TOO_SHORT: "the query is shorter than 3 characters",
+  QUERY_NOT_ASCII: "the query is not plain ASCII",
+  INDEX_BUILDING: "the search index is still building",
+  INDEX_NOT_READY: "the search index is not ready",
+};
+
+/** Reads the non-enumerable search metadata off a reader result list. */
+export function searchMetaOf(results: unknown, requestedOrder: ReaderOrder): SearchMeta {
+  const r = results as {
+    searchMode?: "indexed" | "direct";
+    searchModeReason?: string;
+    catalog?: CatalogInfo;
+    searchOrder?: ReaderOrder;
+    searchExhaustive?: boolean;
+  };
+  return { mode: r.searchMode, reason: r.searchModeReason, catalog: r.catalog, order: r.searchOrder, exhaustive: r.searchExhaustive, requestedOrder };
+}
+
+/** Coverage and order disclosure lines. `found` is the number of sessions returned. */
+export function coverageLines(meta: SearchMeta | undefined, found: number, ambiguousSkipped = false): string[] {
+  const stale = meta?.catalog?.state === "stale" && meta.mode !== "direct";
+  const partial = meta?.exhaustive === false;
+  const qualifier = ambiguousSkipped ? ", except for the skipped ambiguous session(s)" : "";
+  const lines: string[] = [];
+  if (stale) {
+    const refresh = meta?.catalog?.refreshScheduled === false
+      ? "No refresh is running; call cursor_history_index_refresh."
+      : "A refresh is running.";
+    lines.push(`Coverage: index is STALE (Cursor history changed); results may miss recent messages. ${refresh}`);
+  } else if (meta?.mode === "indexed") {
+    lines.push(partial
+      ? "Coverage: index-assisted search verified against source; not exhaustive (see Order)."
+      : `Coverage: index-assisted search verified against source; complete for this scope${qualifier}.`);
+  } else {
+    const reason = meta?.reason ? ` The index was not used: ${REASON_TEXT[meta.reason] ?? `reason ${meta.reason}`}.` : "";
+    lines.push(partial
+      ? `Coverage: scan of this scope (direct); not exhaustive (see Order).${reason}`
+      : `Coverage: full scan of this scope (direct); complete${qualifier}.${reason}`);
+  }
+  if (partial) {
+    lines.push(`Order: most recent matching sessions first; stopped after ${found} sessions. More matching sessions may exist; use order=relevance for a complete ranked search or increase limit.`);
+  } else if (meta?.requestedOrder === "recent" && meta.order === undefined) {
+    lines.push("Order: this reader did not report a search order; recent order requires a newer reader, so results may be in relevance order.");
+  }
+  return lines;
+}
+
 /**
  * Bounds total output: results are added until the next one would exceed
  * maxChars (the first result is always included).
@@ -110,7 +182,7 @@ function skippedLine(ids: string[]): string[] {
 export function formatSearchOutput(
   query: string,
   results: SearchResult[],
-  options: { limit: number; maxChars?: number; workspace?: string; skippedAmbiguous?: string[]; scope?: WorkspaceScopeResolution }
+  options: { limit: number; maxChars?: number; workspace?: string; skippedAmbiguous?: string[]; scope?: WorkspaceScopeResolution; meta?: SearchMeta }
 ): string {
   const maxChars = options.maxChars ?? DEFAULT_SEARCH_MAX_CHARS;
   const blocks: string[] = [];
@@ -122,12 +194,12 @@ export function formatSearchOutput(
     used += block.length + 1;
   }
   const truncated = blocks.length < results.length;
-  const scope = options.workspace ? `workspace ${options.workspace}` : "all workspaces";
   const limitNote = results.length >= options.limit
-    ? ` The limit of ${options.limit} was reached, so further matches may exist; raise limit (max 100) or narrow with workspace.`
-    : "";
+    ? [`The limit of ${options.limit} was reached, so further matches may exist; raise limit (max 100) or narrow with workspace.`]
+    : [];
   const skipped = options.skippedAmbiguous ?? [];
   const scopeNotice = formatScopeNotice(options.scope);
+  const sessions = new Set(results.map(r => r.session.id)).size;
   return [
     ...(scopeNotice ? [scopeNotice] : []),
     `Found ${results.length} match(es) for "${query}":`,
@@ -136,7 +208,8 @@ export function formatSearchOutput(
     `results shown: ${blocks.length} of ${results.length} returned · truncated: ${truncated}`,
     ...(truncated ? [`Output was bounded at maxChars=${maxChars}; raise maxChars (max 1000000) or lower limit/context to see the remaining ${results.length - blocks.length} result(s).`] : []),
     ...skippedLine(skipped),
-    `Coverage: search scanned ${scope} with a full scan through the direct source reader (not an index), so the scan is complete for that scope${skipped.length > 0 ? ", except for the skipped ambiguous session(s)" : ""}.${limitNote}`,
+    ...coverageLines(options.meta, sessions, skipped.length > 0),
+    ...limitNote,
   ].join("\n");
 }
 
@@ -151,38 +224,53 @@ export async function handleSearch(
     const parsed = SearchInputSchema.parse(args);
     throwIfAborted(ctx.signal);
     const limit = parsed.limit ?? 10;
+    const requestedOrder: ReaderOrder = parsed.order === "recent" ? "recent" : "match-count";
 
     // Supplying onDiagnostic makes the reader skip ambiguous sessions (and
     // report them) instead of rejecting the whole search.
     const skippedAmbiguous: string[] = [];
-    const results = await searchSessions(parsed.query, {
-      ...readConfig(parsed, ctx.signal),
+    const config: LibraryConfig & { searchOrder?: ReaderOrder } = {
+      ...readConfig(parsed, ctx.signal, { searchIndex: true }),
       limit,
       context: parsed.context,
+      // Only sent when non-default so a reader without searchOrder never sees an unknown key.
+      ...(requestedOrder === "recent" ? { searchOrder: requestedOrder } : {}),
       onDiagnostic: (d: { code: string; sessionId?: string }) => {
         if (d.code === "SESSION_AMBIGUOUS" && d.sessionId && !skippedAmbiguous.includes(d.sessionId)) {
           skippedAmbiguous.push(d.sessionId);
         }
       },
-    });
+    };
+    let results;
+    try {
+      results = await searchSessions(parsed.query, config);
+    } catch (error) {
+      const e = error as { name?: unknown; message?: unknown };
+      if (requestedOrder === "recent" && e.name === "InvalidConfigError" && /searchOrder/.test(String(e.message))) {
+        throw new McpToolError({
+          code: MCP_ERROR_CODES.INVALID_ARGUMENTS,
+          message: "order=recent requires a newer cursor-history reader than the one installed.",
+          remedy: "Use order=relevance, or upgrade the cursor-history dependency.",
+        });
+      }
+      throw error;
+    }
     throwIfAborted(ctx.signal);
+    const meta = searchMetaOf(results, requestedOrder);
 
     if (results.length === 0) {
       const scopeNotice = formatScopeNotice(results.scope);
       const where = parsed.workspace ? `workspace ${parsed.workspace}` : "all workspaces";
       const unsearchable = results.scope?.state === "empty" || results.scope?.state === "not-found";
-      const coverage = unsearchable
-        ? `Coverage: ${where} has no searchable sessions.`
-        : `Coverage: full scan of ${where} through the direct source reader (not an index); no match exists in that scope${skippedAmbiguous.length > 0 ? ", except for the skipped ambiguous session(s)" : ""}.`;
       return [
         ...(scopeNotice ? [scopeNotice] : []),
         `No matches found for "${parsed.query}".`,
         ...skippedLine(skippedAmbiguous),
-        coverage,
+        ...(unsearchable ? [`Coverage: ${where} has no searchable sessions.`] : coverageLines(meta, 0, skippedAmbiguous.length > 0)),
       ].join("\n");
     }
 
-    return formatSearchOutput(parsed.query, results, { limit, maxChars: parsed.maxChars, workspace: parsed.workspace, skippedAmbiguous, scope: results.scope });
+    return formatSearchOutput(parsed.query, results, { limit, maxChars: parsed.maxChars, workspace: parsed.workspace, skippedAmbiguous, scope: results.scope, meta });
   } catch (error) {
     throw toToolError(error);
   }
