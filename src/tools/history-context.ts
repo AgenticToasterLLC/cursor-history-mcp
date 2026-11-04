@@ -1,5 +1,6 @@
 import type { LibraryConfig, Session, WorkspaceScopeResolution } from "cursor-history";
 import { z } from "zod";
+import { catalogMode } from "./catalog.js";
 
 export const readScopeShape = {
   workspace: z.string().min(1).optional(),
@@ -76,8 +77,17 @@ export function throwIfAborted(signal?: AbortSignal): void {
   signal?.throwIfAborted();
 }
 
-export function readConfig(value: { workspace?: string; includeCrossWorkspaceSources?: boolean }, signal?: AbortSignal): LibraryConfig {
+/**
+ * Library config for a read. Only callers passing `useCatalog` (currently list) get the
+ * sidecar catalog mode from CURSOR_HISTORY_MCP_CATALOG; search/show/export stay direct.
+ */
+export function readConfig(
+  value: { workspace?: string; includeCrossWorkspaceSources?: boolean },
+  signal?: AbortSignal,
+  options: { useCatalog?: boolean } = {}
+): LibraryConfig {
   return {
+    ...(options.useCatalog ? { catalog: catalogMode() } : {}),
     ...(signal ? { signal } : {}),
     workspace: value.workspace,
     includeCrossWorkspaceSources: value.includeCrossWorkspaceSources ?? false,

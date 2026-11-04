@@ -53,7 +53,7 @@ describe("formatStatus", () => {
     const text = formatStatus({ ...base, probe: { ok: true, total: 3, composer: 2, store: 1, ms: 7 } });
     expect(text).toContain("OK: 3 known workspace(s)");
     expect(text).toContain("composer=2 store=1");
-    expect(text).toContain("Catalog: not yet available in this version");
+    expect(text).toContain("Catalog mode: direct");
     expect(text).toContain("120000 (default)");
   });
   it("reports probe failure", () => {

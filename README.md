@@ -140,7 +140,8 @@ These select data roots, not a project. Use a tool's `workspace` argument to fil
 | `cursor_history_migrate` | Move/copy eligible Composer sessions. `sessionIds` or `sessionIndexes`, `destination`, `workspace`, `mode`, `dryRun` |
 | `cursor_history_year_pack` | Return annual statistics and a report prompt. `year`, `language` (`en` / `zh`), `workspace`, sample limits |
 | `cursor_history_workspaces` | List known workspace paths (paths only, no content); some may have no sessions. `query`, `limit`, `offset` |
-| `cursor_history_status` | Versions, data locations, time budget and a readability probe. `verbose` |
+| `cursor_history_index_refresh` | Start or wait for a rebuild of the fast-listing catalog (writes only the sidecar file). `workspace`, `wait`, `timeoutMs` |
+| `cursor_history_status` | Versions, data locations, time budget, catalog state and a readability probe. `verbose` |
 
 Prefer the **exact session UUID** from list/search for follow-up calls. Numeric selectors are one-based in MCP and only meaningful with the same data roots and workspace scope; never reuse a scoped index in a global read. UUID spelling is case-sensitive.
 
@@ -154,6 +155,25 @@ The show tool abbreviates long thinking/tool payloads. Use an export when you ne
 - “Search only /work/myapp. Keep that workspace scope when opening a result.”
 - “Export this session as JSON, including the available source details.”
 - “Preview copying this Composer session to /work/new-app with dryRun. Do not modify anything yet.”
+
+<a id="catalog"></a>
+## Catalog (fast listing)
+
+On a large history a direct list can take seconds. The server keeps a disposable sidecar snapshot of the session summaries so `cursor_history_list` can answer in tens of milliseconds.
+
+| Variable | Meaning |
+|---|---|
+| `CURSOR_HISTORY_MCP_CATALOG` | `auto` (default): serve a ready snapshot, build in the background when missing or stale. `strict`: serve only verified snapshots, building synchronously when needed. `direct`: never use the catalog. |
+| `CURSOR_HISTORY_INDEX_PATH` | Override the sidecar file location. Default on Windows: `%LOCALAPPDATA%\cursor-history\catalog-v1.sqlite` (macOS `~/Library/Caches/cursor-history`, Linux `$XDG_CACHE_HOME` or `~/.cache`). |
+| `CURSOR_HISTORY_MCP_CATALOG_WARM` | `1` schedules one background global build after the server connects. Off by default; otherwise the first list call schedules the build. It never blocks startup. |
+
+- The sidecar is a cache, never a source of truth. It is safe to delete at any time; it is rebuilt on demand.
+- The server never writes Cursor data. Only the sidecar file is written, and only by listing builds and `cursor_history_index_refresh`.
+- List output includes a `Catalog:` line. `ready` means the snapshot matches the sources as verified. `building` means the first result was read directly and is complete. **`STALE` means Cursor history changed since the snapshot; the previous rows are shown and may be missing recent sessions** until the background refresh finishes (call `cursor_history_index_refresh` with `wait: true`, or use `strict`).
+- Changes made in the last couple of seconds are not treated as settled, so a snapshot built right after a change may still report `stale`.
+- Positional indexes (`#N`) are snapshot-bound; prefer the session UUID.
+- Search, show and export always read directly for now. `cursor_history_status` reports the sidecar path, size and per-scope state.
+- Build workers are unref'd background threads and never keep the server alive; they end with the process.
 
 <a id="safety"></a>
 ## Local data and write safety
