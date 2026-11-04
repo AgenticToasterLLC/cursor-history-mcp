@@ -1,6 +1,6 @@
 {
   "name": "cursor-history-mcp",
-  "version": "0.3.1",
+  "version": "0.4.0-beta.0",
   "mcpName": "io.github.S2thend/cursor-history",
   "description": "MCP server for browsing, searching, and exporting Cursor AI chat history",
   "repository": {
@@ -36,7 +36,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.0",
-    "cursor-history": "0.19.0",
+    "cursor-history": "https://github.com/AgenticToasterLLC/cursor-history/releases/download/v0.20.0-beta.0/cursor-history-0.20.0-beta.0.tgz",
     "zod": "3.25.76"
   },
   "devDependencies": {

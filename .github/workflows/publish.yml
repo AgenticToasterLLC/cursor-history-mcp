@@ -10,6 +10,8 @@ on:
 
 jobs:
   publish:
+    # GitHub prereleases (for example fork betas distributed as release tarballs) never publish.
+    if: ${{ !github.event.release.prerelease }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

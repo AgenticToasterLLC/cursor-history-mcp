@@ -30,7 +30,7 @@ No embeddings, indexing service, or API key is required by this server. Your ass
 
 Requires Node.js **20.x or 22.x–26.x**, readable local Cursor history, and a client that supports local stdio MCP servers. The client must run the server on the machine where that history is available.
 
-**Version scope:** these docs describe `cursor-history-mcp@0.3.1`, powered by `cursor-history@0.19.0`. If you are testing a checkout before its npm publication, use [the source setup](#run-from-source) below.
+**Version scope:** these docs describe the prerelease `cursor-history-mcp@0.4.0-beta.0`, powered by `cursor-history@0.20.0-beta.0`. Neither prerelease is on npm. Install it from [its GitHub release](#install-the-prerelease) or [build it from source](#run-from-source). The `cursor-history-mcp@0.3.1` commands below install the latest npm release. That release lacks the `_workspaces`, `_status` and `_index_refresh` tools, the catalog and the search index.
 
 **Client compatibility:** the server uses MCP SDK 1.30.0. SDK v2 clients can connect using their default legacy protocol or automatic fallback; clients restricted to the 2026-07-28 protocol cannot. See [SDK interoperability](docs/sdk-compatibility.md) for the tested scope.
 
@@ -50,6 +50,31 @@ Add this server entry to your client's MCP configuration:
 ```
 
 If the client cannot find `npx`, use the absolute path to its executable. Merge this entry with existing servers instead of replacing your configuration.
+
+<a id="install-the-prerelease"></a>
+### Install the prerelease
+
+The prerelease is published as a package tarball on the [GitHub release](https://github.com/AgenticToasterLLC/cursor-history-mcp/releases/tag/v0.4.0-beta.0). It pulls its reader from the matching [reader release](https://github.com/AgenticToasterLLC/cursor-history/releases/tag/v0.20.0-beta.0). `npx` accepts the tarball URL in place of a package name:
+
+```json
+{
+  "mcpServers": {
+    "cursor-history": {
+      "command": "npx",
+      "args": ["-y", "https://github.com/AgenticToasterLLC/cursor-history-mcp/releases/download/v0.4.0-beta.0/cursor-history-mcp-0.4.0-beta.0.tgz"]
+    }
+  }
+}
+```
+
+In Claude Code:
+
+```bash
+# macOS / Linux
+claude mcp add --transport stdio --scope user cursor-history -- npx -y https://github.com/AgenticToasterLLC/cursor-history-mcp/releases/download/v0.4.0-beta.0/cursor-history-mcp-0.4.0-beta.0.tgz
+# Windows (npx is a .cmd shim)
+claude mcp add --transport stdio --scope user cursor-history -- cmd /c npx -y https://github.com/AgenticToasterLLC/cursor-history-mcp/releases/download/v0.4.0-beta.0/cursor-history-mcp-0.4.0-beta.0.tgz
+```
 
 ### Cursor
 
@@ -78,14 +103,43 @@ The first run may download dependencies from npm. Running the server alone start
 
 ### Run from source
 
-For development or testing before npm publication, build this repository:
+For development or testing before npm publication, build this repository. The same steps work on Windows, macOS and Linux. You need git, npm and Node.js 20.x or 22.x–26.x (Node.js 24 is used for development).
 
 ```bash
+git clone https://github.com/AgenticToasterLLC/cursor-history-mcp.git
+cd cursor-history-mcp
 npm ci
 npm run build
 ```
 
-In the server entry, use `"command": "node"` and `"args": ["/absolute/path/to/cursor-history-mcp/dist/index.cjs"]`, replacing the path. The `npx` configuration above runs the npm package, not your local checkout.
+Add `--branch <tag-or-branch>` to `git clone` to build a specific version. `npm ci` installs the reader version pinned in `package.json`. For this prerelease, that is the tarball attached to the reader's GitHub release.
+
+**SQLite binding.** `better-sqlite3` downloads a prebuilt binary for Windows x64, macOS (Intel and Apple silicon) and Linux x64/arm64. On other platforms, or without network access to its prebuilt binaries, it compiles from source. Compiling needs Python 3 and a C++ toolchain:
+- Windows: Visual Studio Build Tools with "Desktop development with C++"
+- macOS: `xcode-select --install`
+- Linux: `make` and `g++`, for example `build-essential`
+
+**Testing reader changes too.** Build the reader next to this checkout, then install its tarball over the pinned version:
+
+```bash
+git clone https://github.com/AgenticToasterLLC/cursor-history.git ../cursor-history
+cd ../cursor-history && npm ci && npm run build && npm pack && cd ../cursor-history-mcp
+npm i --no-save ../cursor-history/cursor-history-<version>.tgz
+npm run build
+```
+
+`--no-save` leaves `package.json` and the lockfile unchanged. A later `npm ci` restores the pinned reader, so repeat the `npm i --no-save` step after one.
+
+**Register the build** using the absolute path to `dist/index.cjs`. Run `node` directly, without `npx` or `cmd /c`, on every OS:
+
+```bash
+# macOS / Linux
+claude mcp add --transport stdio --scope user cursor-history -- node /absolute/path/to/cursor-history-mcp/dist/index.cjs
+# Windows (forward slashes work)
+claude mcp add --transport stdio --scope user cursor-history -- node C:/path/to/cursor-history-mcp/dist/index.cjs
+```
+
+In other clients, use `"command": "node"` and `"args": ["/absolute/path/to/cursor-history-mcp/dist/index.cjs"]`. The `npx` configurations above run a published package, not your checkout. After each rebuild, restart or reconnect the server (in Claude Code: `/mcp`). A running server keeps the build it started with. Then [verify that all tools are listed](#verify-tools).
 
 <a id="claude-code-vscodium-windows"></a>
 ### Claude Code in VSCodium on Windows
@@ -119,6 +173,7 @@ Equivalent user-level JSON (`~/.claude.json`, under `mcpServers`):
 
 For a local build use `"command": "node"` and `"args": ["C:/path/to/cursor-history-mcp/dist/index.cjs"]`.
 
+<a id="verify-tools"></a>
 **Verify that all tools are listed.** Run `claude mcp list` (the server should show as connected), then `/mcp` inside Claude Code and open the server. You should see all eleven tools: `cursor_history_list`, `_show`, `_search`, `_export`, `_backup`, `_restore`, `_migrate`, `_year_pack`, `_workspaces`, `_status` and `_index_refresh`. Ask Claude to call `cursor_history_status` to confirm that history is actually readable, not just that the server is connected.
 
 **Environment variables**
@@ -182,7 +237,7 @@ Agents can use either interface: direct CLI/API invocation or MCP tool calls.
 <a id="compatibility"></a>
 ## Works across storage generations
 
-With the `0.19.0` reader in MCP `0.3.1`:
+With the `0.20.0-beta.0` reader in MCP `0.4.0-beta.0`:
 
 | Source | Local files | Read / search / export |
 |---|---|---|

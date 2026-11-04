@@ -1,6 +1,6 @@
 # MCP SDK interoperability
 
-`cursor-history-mcp@0.3.1` uses `@modelcontextprotocol/sdk@1.30.0` and `zod@3.25.76`. Its history reader remains `cursor-history@0.19.0`.
+`cursor-history-mcp@0.4.0-beta.0` uses `@modelcontextprotocol/sdk@1.30.0` and `zod@3.25.76`. Its history reader is `cursor-history@0.20.0-beta.0`.
 
 SDK package versions and MCP wire-protocol revisions are different things. A client using SDK v2 does not require every server to use SDK v2.
 

@@ -62,3 +62,27 @@ Repair the registry-specific failure and resume that publication separately.
 
 Local checks cannot prove npm-side OIDC authorization. That requires the exact
 trusted-publisher binding above and a real GitHub-hosted release run.
+
+## Prerelease tarballs (fork betas)
+
+A prerelease such as `0.4.0-beta.0` is distributed as GitHub release assets
+instead of npm packages, so it can be tested before an upstream pull request.
+The publish job skips GitHub releases marked **pre-release**.
+
+1. Reader: set the version (`npm version <v> --no-git-tag-version`, then
+   `node scripts/generate-package-version.mjs`), run its gate, and `npm pack`.
+   Upload that exact `cursor-history-<v>.tgz` to a pre-release on the reader
+   repository tagged `v<v>`. Note: pushing a `v*` tag starts the reader's npm
+   workflow, which runs its checks and then fails at `npm publish` without
+   credentials; nothing is published.
+2. MCP: point `dependencies.cursor-history` at the asset URL
+   (`https://github.com/<owner>/cursor-history/releases/download/v<v>/cursor-history-<v>.tgz`).
+   Install the local tarball, then set the lockfile entry's `resolved` field to
+   that URL. Keep the `integrity` hash: it is the hash of the exact file you
+   upload, and `npm ci` fails if the uploaded file differs.
+3. Set the MCP version in `package.json`, `package-lock.json` and `server.json`,
+   run the gate, `npm pack`, and upload `cursor-history-mcp-<v>.tgz` to a
+   pre-release tagged `v<v>`. Upload the reader tarball first: installs of the
+   MCP tarball download it.
+4. Before the upstream pull request, replace the URL dependency with the
+   published reader version.

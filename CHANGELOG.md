@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.4.0-beta.0 (prerelease, 2026-11-04)
+
+Prerelease from the AgenticToasterLLC fork, distributed as a GitHub release tarball (not on npm). Uses the `cursor-history@0.20.0-beta.0` prerelease reader from its GitHub release.
+
 ### Breaking changes for MCP callers
 
 - **`cursor_history_migrate` is a preview by default.** `dryRun` now defaults to `true`; a real migration needs `dryRun: false`. With `mode: "move"` (the default) it also needs `confirm: true`, otherwise the call is refused with `[INVALID_ARGUMENTS]` (a move deletes the originals). Previews print `PREVIEW ONLY. Nothing was changed.`
