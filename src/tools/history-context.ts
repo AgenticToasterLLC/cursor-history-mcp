@@ -55,8 +55,30 @@ export function readSelector(value: { sessionIndex?: number; sessionId?: string 
   throw new Error("Provide a session selector");
 }
 
-export function readConfig(value: { workspace?: string; includeCrossWorkspaceSources?: boolean }): LibraryConfig {
+/** Per-call context handed to tool handlers by the server. */
+export interface HandlerContext {
+  /** Fires on client cancellation or when the per-call time budget elapses. */
+  signal?: AbortSignal;
+}
+
+/** Last path segment of a POSIX or Windows path. */
+export function pathBasename(path: string): string {
+  const parts = path.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] ?? path;
+}
+
+/**
+ * Cooperative abort check. SQLite calls are synchronous, so an abort cannot
+ * interrupt a read in flight; it takes effect between source pages and at the
+ * checkpoints handlers place around library calls.
+ */
+export function throwIfAborted(signal?: AbortSignal): void {
+  signal?.throwIfAborted();
+}
+
+export function readConfig(value: { workspace?: string; includeCrossWorkspaceSources?: boolean }, signal?: AbortSignal): LibraryConfig {
   return {
+    ...(signal ? { signal } : {}),
     workspace: value.workspace,
     includeCrossWorkspaceSources: value.includeCrossWorkspaceSources ?? false,
   };

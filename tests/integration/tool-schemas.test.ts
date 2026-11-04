@@ -134,7 +134,8 @@ describe("published tool schemas and selector validation", () => {
     const input = name === "cursor_history_migrate" ? { ...args, destination: join(root, "destination"), dryRun: true } : args;
     const result = await call(name, input);
     expect(result.error).toBe(true);
-    expect(result.text).toBe(message);
+    // show/export tag validation errors with [INVALID_ARGUMENTS]; migrate keeps its plain message.
+    expect(result.text).toBe(name === "cursor_history_migrate" ? message : `[INVALID_ARGUMENTS] ${message}`);
     expect(snapshot()).toEqual(before);
   });
 });

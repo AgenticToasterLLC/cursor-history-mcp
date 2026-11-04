@@ -126,6 +126,20 @@ export const MCP_ERROR_CODES = {
   RESTORE_FAILED: -32006,
   INVALID_BACKUP: -32007,
   INTEGRITY_FAILED: -32008,
+  INVALID_ARGUMENTS: -32009,
+  TIME_BUDGET_EXCEEDED: -32010,
+  CANCELLED: -32011,
+  SOURCE_LIMIT_EXCEEDED: -32012,
+  WORKSPACE_AMBIGUOUS: -32013,
+  SESSION_AMBIGUOUS: -32014,
+  SESSION_SCOPE_MISMATCH: -32015,
+  INTERNAL_ERROR: -32016,
 } as const;
 
 export type McpErrorCode = (typeof MCP_ERROR_CODES)[keyof typeof MCP_ERROR_CODES];
+
+/** Symbolic name (e.g. "TIME_BUDGET_EXCEEDED") for a numeric MCP error code. */
+export function errorCodeName(code: McpErrorCode): string {
+  const entry = Object.entries(MCP_ERROR_CODES).find(([, value]) => value === code);
+  return entry ? entry[0] : "INTERNAL_ERROR";
+}
